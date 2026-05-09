@@ -248,6 +248,38 @@ async function unwrapError(res: Response, fallback: string): Promise<never> {
   throw new Error(detail);
 }
 
+/**
+ * Authenticated file download. Fetches `path` with a Bearer token, then
+ * triggers a browser save of the response as a Blob. Used by export buttons
+ * that previously rendered plain `<a href>` links — those don't carry auth
+ * headers and would 401 against the v5 auth gate.
+ */
+async function downloadAuthed(path: string, suggestedName: string): Promise<void> {
+  const tokenHdrs: Record<string, string> = {};
+  if (_getToken) {
+    const tok = await _getToken();
+    if (tok) tokenHdrs["Authorization"] = `Bearer ${tok}`;
+  }
+  const res = await fetch(`${API_BASE}${path}`, { headers: tokenHdrs });
+  if (!res.ok) await unwrapError(res, `download failed (${res.status})`);
+
+  // Try to honor server-provided filename, else fall back to the caller's hint.
+  const cd = res.headers.get("Content-Disposition") || "";
+  const m = /filename\*?=(?:UTF-8''|")?([^"';\n]+)/i.exec(cd);
+  const filename = (m && decodeURIComponent(m[1])) || suggestedName;
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Defer revocation; some browsers race on fast clicks.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export const api = {
   meta: () => request<ServerMeta>("/api/meta"),
 
@@ -351,13 +383,36 @@ export const api = {
       `/api/jobs/${jobId}?include_results=${includeResults ? "true" : "false"}`,
     ),
 
-  /** URL for downloading the job's results in the requested format. */
+  /**
+   * URL for downloading the job's results in the requested format.
+   * NOTE: this URL alone won't work for an unauthenticated browser navigation
+   * (`<a href>`) because the auth-gate middleware refuses requests without a
+   * Bearer token. Use `api.downloadJobResults()` to fetch the bytes with
+   * auth and trigger a Blob download client-side instead.
+   */
   jobResultsUrl: (jobId: string, fmt: ExportFormat = "csv", statuses?: Status[]) => {
     const qs = statuses && statuses.length > 0 ? `?status=${statuses.join(",")}` : "";
     return `${API_BASE}/api/jobs/${jobId}/results.${fmt}${qs}`;
   },
 
   jobCsvUrl: (jobId: string) => `${API_BASE}/api/jobs/${jobId}/results.csv`,
+
+  /**
+   * Authenticated download. Fetches the job results (or any /api/* path),
+   * attaches the Bearer token, and triggers a browser save of the response
+   * as a Blob. Required because plain `<a href>` cannot send Authorization
+   * headers and would 401 against the auth gate.
+   */
+  downloadJobResults: async (
+    jobId: string,
+    fmt: ExportFormat = "csv",
+    statuses?: Status[],
+  ): Promise<void> => {
+    const qs = statuses && statuses.length > 0 ? `?status=${statuses.join(",")}` : "";
+    const path = `/api/jobs/${jobId}/results.${fmt}${qs}`;
+    const filename = `${jobId}.${fmt}`;
+    await downloadAuthed(path, filename);
+  },
 
   dashboard: () => request<DashboardSnapshot>("/api/dashboard"),
 

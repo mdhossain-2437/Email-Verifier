@@ -1,0 +1,39 @@
+# Generated/copied by deploy/azure/install.sh.
+# Caddy serves the built frontend (frontend/dist) and reverse-proxies the
+# /api/*, /healthz, and /docs paths to the FastAPI backend on :8000.
+{
+    email __EMAIL__
+}
+
+__DOMAIN__ {
+    encode zstd gzip
+
+    # Backend routes (FastAPI)
+    @api {
+        path /api/* /healthz /docs /openapi.json
+    }
+    handle @api {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    # Static frontend (Vite build output)
+    handle {
+        root * __APP_DIR__/frontend/dist
+        try_files {path} /index.html
+        file_server
+
+        # Long-cache hashed assets
+        @assets {
+            path /assets/*
+        }
+        header @assets Cache-Control "public, max-age=31536000, immutable"
+    }
+
+    # Hardening
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+    }
+}

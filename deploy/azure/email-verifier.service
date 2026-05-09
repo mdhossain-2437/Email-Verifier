@@ -1,0 +1,24 @@
+[Unit]
+Description=Email-Verifier FastAPI backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# install.sh writes a drop-in at
+#   /etc/systemd/system/email-verifier.service.d/override.conf
+# with User, Group, WorkingDirectory, APP_DIR, and EnvironmentFile.
+ExecStart=/usr/local/bin/poetry run uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+LimitNOFILE=65536
+
+# Security hardening (override.conf may relax these if you need writable paths)
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
