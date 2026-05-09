@@ -1,14 +1,21 @@
 """FastAPI entry point for the Email Verifier backend.
 
 Endpoints:
-    POST /api/extract         - extract emails from raw text
-    POST /api/extract-file    - extract emails from an uploaded file
-    POST /api/verify          - verify a single email
-    POST /api/verify-bulk     - verify a list of emails (sync, capped)
-    POST /api/jobs            - submit a long-running bulk verification job
-    GET  /api/jobs/{job_id}   - poll job status
-    GET  /api/jobs/{job_id}/results.csv - download CSV results
-    GET  /healthz             - liveness probe
+    POST /api/extract                  - extract emails from raw text
+    POST /api/extract-file             - extract emails from an uploaded file
+                                         (.txt, .csv, .xlsx, .html, .json,
+                                          .log, .eml, .mbox)
+    POST /api/clean                    - dedupe + classify a list (no DNS/SMTP)
+    POST /api/verify                   - verify a single email
+    POST /api/verify-bulk              - verify a list of emails (sync, capped)
+    POST /api/jobs                     - submit a long-running bulk
+                                         verification job
+    POST /api/jobs/upload              - submit a job from an uploaded file
+    GET  /api/jobs/{job_id}            - poll job status
+    GET  /api/jobs/{job_id}/results    - download results in csv/xlsx/txt/json
+                                         with optional status filter
+    GET  /api/meta                    - feature/limits surface for the UI
+    GET  /healthz                      - liveness probe
 """
 
 from __future__ import annotations
@@ -16,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import io
+import json
 import os
 import time
 import uuid
@@ -23,12 +31,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from .disposable import is_disposable, is_role
 from .extractor import extract_emails, extract_unique
+from .files import extract_from_file, supported_extensions
+from .locale import country_for_domain
+from .providers import provider_for_domain
 from .verifier import VerificationResult, verify_email, verify_many
 
 app = FastAPI(
@@ -52,6 +64,26 @@ app.add_middleware(
 
 MAX_BULK_SYNC = 200  # cap for /api/verify-bulk to keep response under HTTP timeouts
 MAX_JOB_INPUTS = 100_000
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MiB upload cap
+
+
+def _parse_status_filter(value: Optional[str]) -> Optional[set[str]]:
+    """Parse ``?status=valid,risky`` style query strings."""
+    if not value:
+        return None
+    out = {p.strip().lower() for p in value.split(",") if p.strip()}
+    return out or None
+
+
+def _split_address_simple(email: str) -> tuple[str, str]:
+    """Quick local/domain split — no validation. Used for the cheap
+    classifier endpoints (/api/clean) that don't pay the full verifier
+    cost."""
+    addr = (email or "").strip().lower()
+    if "@" not in addr:
+        return addr, ""
+    local, _, domain = addr.rpartition("@")
+    return local, domain
 
 
 # ---------------------------------------------------------------------------
@@ -93,12 +125,48 @@ class BulkVerifyResponse(BaseModel):
     results: list[dict]
 
 
+class CleanRequest(BaseModel):
+    emails: Optional[list[str]] = None
+    text: Optional[str] = None
+    drop_invalid_syntax: bool = True
+    drop_disposable: bool = False
+    drop_role: bool = False
+
+
+class CleanedEmail(BaseModel):
+    email: str
+    local_part: str
+    domain: str
+    valid_syntax: bool
+    is_disposable: bool
+    is_role: bool
+    is_free_provider: bool
+    provider: Optional[str] = None
+    country_code: Optional[str] = None
+    country_name: Optional[str] = None
+
+
+class CleanResponse(BaseModel):
+    input_count: int
+    output_count: int
+    duplicates_removed: int
+    invalid_syntax_removed: int
+    disposable_removed: int
+    role_removed: int
+    elapsed_ms: float
+    emails: list[CleanedEmail]
+
+
 class JobSubmitRequest(BaseModel):
     emails: Optional[list[str]] = None
     text: Optional[str] = None
     check_mx: bool = True
     check_smtp: bool = False
     concurrency: int = Field(20, ge=1, le=64)
+    drop_duplicates: bool = True
+    drop_invalid_syntax: bool = False
+    drop_disposable: bool = False
+    drop_role: bool = False
 
 
 class JobStatusResponse(BaseModel):
@@ -154,6 +222,21 @@ async def healthz():
     return {"status": "ok"}
 
 
+@app.get("/api/meta")
+async def meta_endpoint():
+    """Surface feature/limits to the frontend so the UI can introspect
+    what the server actually supports (file types, caps) without hard-
+    coding values that drift between repo and deploy."""
+    return {
+        "supported_extensions": supported_extensions(),
+        "max_upload_bytes": MAX_UPLOAD_BYTES,
+        "max_bulk_sync": MAX_BULK_SYNC,
+        "max_job_inputs": MAX_JOB_INPUTS,
+        "result_columns": _RESULT_COLUMNS,
+        "download_formats": list(_FORMAT_MEDIA.keys()),
+    }
+
+
 @app.post("/api/extract", response_model=ExtractResponse)
 async def extract_endpoint(req: ExtractRequest):
     started = time.perf_counter()
@@ -171,13 +254,92 @@ async def extract_file_endpoint(file: UploadFile = File(...)):
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="empty file")
-    text = raw.decode("utf-8", errors="replace")
-    emails = extract_emails(text)
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"file is {len(raw):,} bytes; max {MAX_UPLOAD_BYTES:,} bytes",
+        )
+    try:
+        emails = extract_from_file(file.filename or "", raw)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
     return ExtractResponse(
         count=len(emails),
         emails=emails,
         elapsed_ms=(time.perf_counter() - started) * 1000,
     )
+
+
+def _classify_clean(emails: list[str], req: CleanRequest) -> CleanResponse:
+    """Pure / fast cleaner — no DNS lookups, no SMTP. Operates entirely
+    on the lexical shape of each address so it runs in a few ms even for
+    100k inputs. Useful as a pre-flight before paying for a full
+    verification job."""
+    started = time.perf_counter()
+    seen: set[str] = set()
+    invalid_count = 0
+    disposable_count = 0
+    role_count = 0
+    out: list[CleanedEmail] = []
+    for raw in emails:
+        addr = (raw or "").strip().lower()
+        if not addr:
+            continue
+        if addr in seen:
+            continue
+        seen.add(addr)
+        local, domain = _split_address_simple(addr)
+        valid_syntax = bool(local and domain and "." in domain)
+        is_dispo = bool(domain) and is_disposable(domain)
+        is_rl = bool(local) and is_role(local)
+        provider = provider_for_domain(domain)
+        cc, cn = country_for_domain(domain)
+        if req.drop_invalid_syntax and not valid_syntax:
+            invalid_count += 1
+            continue
+        if req.drop_disposable and is_dispo:
+            disposable_count += 1
+            continue
+        if req.drop_role and is_rl:
+            role_count += 1
+            continue
+        out.append(
+            CleanedEmail(
+                email=addr,
+                local_part=local,
+                domain=domain,
+                valid_syntax=valid_syntax,
+                is_disposable=is_dispo,
+                is_role=is_rl,
+                is_free_provider=provider is not None,
+                provider=provider,
+                country_code=cc,
+                country_name=cn,
+            )
+        )
+    return CleanResponse(
+        input_count=len(emails),
+        output_count=len(out),
+        duplicates_removed=len(emails) - len(seen),
+        invalid_syntax_removed=invalid_count,
+        disposable_removed=disposable_count,
+        role_removed=role_count,
+        elapsed_ms=(time.perf_counter() - started) * 1000,
+        emails=out,
+    )
+
+
+@app.post("/api/clean", response_model=CleanResponse)
+async def clean_endpoint(req: CleanRequest):
+    if req.emails:
+        emails = list(req.emails)
+    elif req.text:
+        emails = extract_unique(req.text)
+    else:
+        raise HTTPException(status_code=400, detail="provide either 'emails' or 'text'")
+    if not emails:
+        raise HTTPException(status_code=400, detail="no emails found in input")
+    return _classify_clean(emails, req)
 
 
 @app.post("/api/verify")
@@ -242,15 +404,46 @@ async def _run_job(
         job.finished_at = time.time()
 
 
+def _normalise_for_job(req: JobSubmitRequest, raw_emails: list[str]) -> list[str]:
+    """Apply the request's pre-clean toggles to the input list."""
+    if not raw_emails:
+        return []
+    if req.drop_duplicates:
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        for addr in raw_emails:
+            norm = (addr or "").strip().lower()
+            if not norm or norm in seen:
+                continue
+            seen.add(norm)
+            cleaned.append(norm)
+    else:
+        cleaned = [(addr or "").strip().lower() for addr in raw_emails if addr and addr.strip()]
+
+    if not (req.drop_invalid_syntax or req.drop_disposable or req.drop_role):
+        return cleaned
+
+    out: list[str] = []
+    for addr in cleaned:
+        local, domain = _split_address_simple(addr)
+        valid_syntax = bool(local and domain and "." in domain)
+        if req.drop_invalid_syntax and not valid_syntax:
+            continue
+        if req.drop_disposable and is_disposable(domain):
+            continue
+        if req.drop_role and is_role(local):
+            continue
+        out.append(addr)
+    return out
+
+
 @app.post("/api/jobs", response_model=JobStatusResponse)
 async def submit_job(req: JobSubmitRequest):
     if not req.emails and not req.text:
         raise HTTPException(status_code=400, detail="provide either 'emails' or 'text'")
 
-    if req.emails:
-        emails = list(dict.fromkeys(e.strip().lower() for e in req.emails if e.strip()))
-    else:
-        emails = extract_unique(req.text or "")
+    raw_emails = list(req.emails) if req.emails else extract_unique(req.text or "")
+    emails = _normalise_for_job(req, raw_emails)
 
     if not emails:
         raise HTTPException(status_code=400, detail="no emails found in input")
@@ -272,6 +465,46 @@ async def submit_job(req: JobSubmitRequest):
         )
     )
     return _job_to_status(job, include_results=False)
+
+
+@app.post("/api/jobs/upload", response_model=JobStatusResponse)
+async def submit_job_upload(
+    file: UploadFile = File(...),
+    check_mx: bool = Form(True),
+    check_smtp: bool = Form(False),
+    concurrency: int = Form(20),
+    drop_duplicates: bool = Form(True),
+    drop_invalid_syntax: bool = Form(False),
+    drop_disposable: bool = Form(False),
+    drop_role: bool = Form(False),
+):
+    """Submit a verification job from an uploaded file. Accepts the same
+    formats as ``/api/extract-file`` (.txt/.csv/.xlsx/.html/.json/...)
+    plus the pre-clean toggles available on ``/api/jobs``."""
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="empty file")
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"file is {len(raw):,} bytes; max {MAX_UPLOAD_BYTES:,} bytes",
+        )
+    try:
+        emails = extract_from_file(file.filename or "", raw)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
+
+    req = JobSubmitRequest(
+        emails=emails,
+        check_mx=check_mx,
+        check_smtp=check_smtp,
+        concurrency=max(1, min(concurrency, 64)),
+        drop_duplicates=drop_duplicates,
+        drop_invalid_syntax=drop_invalid_syntax,
+        drop_disposable=drop_disposable,
+        drop_role=drop_role,
+    )
+    return await submit_job(req)
 
 
 def _job_to_status(job: Job, *, include_results: bool) -> JobStatusResponse:
@@ -296,54 +529,160 @@ async def job_status(job_id: str, include_results: bool = False):
     return _job_to_status(job, include_results=include_results)
 
 
+_RESULT_COLUMNS = [
+    "email",
+    "status",
+    "reason",
+    "valid_syntax",
+    "normalized",
+    "local_part",
+    "domain",
+    "is_disposable",
+    "is_role",
+    "is_free_provider",
+    "provider",
+    "country_code",
+    "country_name",
+    "mx_country_code",
+    "mx_country_name",
+    "has_mx",
+    "mx_records",
+    "smtp_deliverable",
+    "smtp_catch_all",
+    "smtp_code",
+    "smtp_message",
+    "gravatar_url",
+    "duration_ms",
+]
+
+
+def _filter_job_results(
+    results: list[dict],
+    statuses: Optional[set[str]],
+) -> list[dict]:
+    if not statuses:
+        return results
+    return [r for r in results if str(r.get("status", "")).lower() in statuses]
+
+
+def _flatten_for_export(results: list[dict]) -> list[dict]:
+    """Replace any list/dict values with a flat string representation so
+    CSV/XLSX exports stay one cell per column."""
+    flat: list[dict] = []
+    for r in results:
+        row = dict(r)
+        mx = row.get("mx_records")
+        if isinstance(mx, list):
+            row["mx_records"] = "; ".join(str(h) for h in mx)
+        flat.append(row)
+    return flat
+
+
+def _results_to_csv(rows: list[dict]) -> str:
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(_RESULT_COLUMNS)
+    for r in rows:
+        writer.writerow([r.get(col, "") for col in _RESULT_COLUMNS])
+    return buf.getvalue()
+
+
+def _results_to_txt(rows: list[dict]) -> str:
+    """Just the email addresses, one per line — handy for piping into mail
+    merge tools that don't care about the verifier's metadata."""
+    return "\n".join(str(r.get("email", "")) for r in rows)
+
+
+def _results_to_xlsx(rows: list[dict]) -> bytes:
+    try:
+        from openpyxl import Workbook  # type: ignore
+    except ImportError as exc:  # pragma: no cover
+        raise HTTPException(
+            status_code=415,
+            detail="openpyxl is not installed; cannot produce xlsx export",
+        ) from exc
+    wb = Workbook(write_only=True)
+    ws = wb.create_sheet("results")
+    ws.append(_RESULT_COLUMNS)
+    for r in rows:
+        ws.append([r.get(col, "") for col in _RESULT_COLUMNS])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+_FORMAT_MEDIA = {
+    "csv": "text/csv",
+    "txt": "text/plain",
+    "json": "application/json",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+
+
 @app.get("/api/jobs/{job_id}/results.csv")
-async def job_results_csv(job_id: str):
+async def job_results_csv(
+    job_id: str,
+    status: Optional[str] = Query(default=None, description="comma-separated statuses"),
+):
+    """Backwards-compatible CSV endpoint kept stable for existing callers.
+    New clients should use ``/api/jobs/{id}/results.{format}`` for xlsx/txt/json."""
+    return await _serve_job_results(job_id, "csv", status)
+
+
+@app.get("/api/jobs/{job_id}/results.{fmt}")
+async def job_results_format(
+    job_id: str,
+    fmt: str,
+    status: Optional[str] = Query(default=None, description="comma-separated statuses"),
+):
+    """Download the job's verification results in ``csv``, ``xlsx``,
+    ``txt`` (one address per line) or ``json``. Optional ``?status=valid``
+    or ``?status=valid,risky`` filters the export to specific outcomes."""
+    return await _serve_job_results(job_id, fmt, status)
+
+
+async def _serve_job_results(job_id: str, fmt: str, status: Optional[str]):
+    fmt = (fmt or "").lower().strip()
+    if fmt not in _FORMAT_MEDIA:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported format '{fmt}'; use one of csv/xlsx/txt/json",
+        )
     job = _JOBS.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="job not found")
     if job.status != "done":
         raise HTTPException(status_code=409, detail=f"job is {job.status}")
 
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerow(
-        [
-            "email",
-            "status",
-            "reason",
-            "valid_syntax",
-            "normalized",
-            "domain",
-            "is_disposable",
-            "is_role",
-            "has_mx",
-            "smtp_deliverable",
-            "smtp_code",
-        ]
-    )
-    for r in job.results:
-        writer.writerow(
-            [
-                r.get("email"),
-                r.get("status"),
-                r.get("reason"),
-                r.get("valid_syntax"),
-                r.get("normalized"),
-                r.get("domain"),
-                r.get("is_disposable"),
-                r.get("is_role"),
-                r.get("has_mx"),
-                r.get("smtp_deliverable"),
-                r.get("smtp_code"),
-            ]
+    statuses = _parse_status_filter(status)
+    selected = _filter_job_results(job.results, statuses)
+    flat = _flatten_for_export(selected)
+
+    suffix = "" if not statuses else f"-{'-'.join(sorted(statuses))}"
+    filename = f"verification-{job_id}{suffix}.{fmt}"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+
+    if fmt == "csv":
+        return StreamingResponse(
+            iter([_results_to_csv(flat)]), media_type=_FORMAT_MEDIA[fmt], headers=headers
         )
-    buf.seek(0)
+    if fmt == "txt":
+        return StreamingResponse(
+            iter([_results_to_txt(flat)]), media_type=_FORMAT_MEDIA[fmt], headers=headers
+        )
+    if fmt == "json":
+        body = json.dumps(
+            {"job_id": job_id, "count": len(selected), "results": selected},
+            indent=2,
+            default=str,
+        )
+        return StreamingResponse(
+            iter([body]), media_type=_FORMAT_MEDIA[fmt], headers=headers
+        )
+    # xlsx
+    data = _results_to_xlsx(flat)
     return StreamingResponse(
-        iter([buf.getvalue()]),
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": f'attachment; filename="verification-{job_id}.csv"'
-        },
+        iter([data]), media_type=_FORMAT_MEDIA[fmt], headers=headers
     )
 
 
