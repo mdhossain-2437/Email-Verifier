@@ -61,6 +61,9 @@ import "./App.css";
 import {
   api,
   setTokenGetter,
+  startHealthProbe,
+  subscribeServerStatus,
+  tryPrimary,
   type ApiKey,
   type CleanedEmail,
   type CleanResponse,
@@ -71,6 +74,7 @@ import {
   type LeadFinderResultRow,
   type LeadFinderTarget,
   type ServerMeta,
+  type ServerStatus,
   type Status,
   type VerifyResult,
 } from "./lib/api";
@@ -157,6 +161,95 @@ and to support@github.com for help. Marketing reports go to ada [at] example
 
 Bogus addresses we should reject: not-an-email, foo@bar, bob@invalid-domain-xyz.test,
 admin@nonexistent-company-abc-12345.com.`;
+
+// ---------------------------------------------------------------------------
+// ServerStatusBanner — degraded-mode UI
+// ---------------------------------------------------------------------------
+//
+// Shows a sticky yellow banner when the live api.ts probe has flipped from
+// the primary backend (VITE_API_URL, e.g. Azure VPS) onto the fallback
+// (VITE_API_FALLBACK_URL, e.g. Vercel). On flip-back to primary we briefly
+// flash a green confirmation toast so the user knows the heavy bulk
+// endpoints are available again. If failover isn't configured at all the
+// component renders nothing.
+
+function ServerStatusBanner() {
+  const [status, setStatus] = useState<ServerStatus | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [recoveredAt, setRecoveredAt] = useState<number | null>(null);
+  const prevModeRef = useRef<ServerStatus["mode"] | null>(null);
+
+  useEffect(() => {
+    const unsub = subscribeServerStatus((s) => {
+      setStatus(s);
+      // If we just transitioned fallback -> primary, flash a recovery toast.
+      if (prevModeRef.current === "fallback" && s.mode === "primary") {
+        setRecoveredAt(Date.now());
+        setTimeout(() => setRecoveredAt(null), 6_000);
+      }
+      prevModeRef.current = s.mode;
+    });
+    return unsub;
+  }, []);
+
+  if (!status) return null;
+  if (!status.failoverAvailable && status.mode === "primary") return null;
+
+  if (status.mode === "fallback") {
+    return (
+      <div className="sticky top-0 z-30 border-b border-amber-400/30 bg-amber-500/10 backdrop-blur-md text-amber-100">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-2 flex flex-wrap items-center gap-3 text-xs">
+          <span className="inline-flex items-center gap-1.5 font-semibold">
+            <ShieldAlert className="w-4 h-4" />
+            Running on fallback server
+          </span>
+          <span className="text-amber-200/80">
+            Primary backend is unreachable. Bulk jobs are limited to{" "}
+            {status.version?.max_job_inputs?.toLocaleString() ?? "small"} rows
+            and may take longer. Single-email checks still work.
+          </span>
+          <button
+            type="button"
+            onClick={async () => {
+              if (retrying) return;
+              setRetrying(true);
+              try {
+                await tryPrimary();
+              } finally {
+                setRetrying(false);
+              }
+            }}
+            disabled={retrying}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-amber-300/30 bg-amber-300/10 hover:bg-amber-300/20 disabled:opacity-60 px-2.5 py-1 text-amber-100 transition"
+          >
+            {retrying ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Activity className="w-3.5 h-3.5" />
+            )}
+            Try primary again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (recoveredAt) {
+    return (
+      <div className="sticky top-0 z-30 border-b border-emerald-400/30 bg-emerald-500/10 backdrop-blur-md text-emerald-100">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-2 text-xs">
+          <CheckCircle2 className="w-4 h-4" />
+          <span className="font-semibold">Primary server restored</span>
+          <span className="text-emerald-200/80">
+            All bulk endpoints are back. You can resume large jobs.
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
 
 function StatusBadge({ status }: { status: Status }) {
   const meta = STATUS_META[status];
@@ -3471,10 +3564,18 @@ const PAGE_TITLES: Record<Tab, string> = {
 };
 
 export default function App() {
+  // Kick off the server-health probe loop once at app start. The api.ts
+  // module-level state ensures it stays a singleton across re-renders.
+  useEffect(() => {
+    const stop = startHealthProbe();
+    return () => stop();
+  }, []);
+
   return (
     <AuthProvider>
       <FirebaseConfigGate>
         <BrowserRouter>
+          <ServerStatusBanner />
           <Routes>
             <Route path="/" element={<HomeRoute />} />
             <Route path="/login" element={<PublicOnly><LoginPage /></PublicOnly>} />
