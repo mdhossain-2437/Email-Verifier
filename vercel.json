@@ -1,40 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "buildCommand": "cd frontend && npm install && npm run build",
+  "buildCommand": "cd frontend && npm ci && npm run build",
   "outputDirectory": "frontend/dist",
   "installCommand": "echo 'install handled in buildCommand'",
   "framework": null,
-  "experimentalServices": {
-    "frontend": {
-      "entrypoint": "frontend",
-      "routePrefix": "/",
-      "framework": "vite"
-    },
-    "backend": {
-      "entrypoint": "backend",
-      "routePrefix": "/_/backend"
-    }
-  },
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "/_/backend/api/:path*"
-    },
-    {
-      "source": "/healthz",
-      "destination": "/_/backend/healthz"
-    },
-    {
-      "source": "/docs",
-      "destination": "/_/backend/docs"
-    },
-    {
-      "source": "/openapi.json",
-      "destination": "/_/backend/openapi.json"
-    },
-    {
-      "source": "/((?!api/|_/backend/|assets/|favicon\\.svg|robots\\.txt|manifest\\.webmanifest|og-image\\.svg|healthz|docs|openapi\\.json).*)",
+      "source": "/((?!assets/|favicon\\.svg|robots\\.txt|manifest\\.webmanifest|og-image\\.svg).*)",
       "destination": "/index.html"
     }
   ],

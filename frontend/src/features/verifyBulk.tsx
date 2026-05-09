@@ -52,6 +52,7 @@ import {
   GhostButton,
   PrimaryButton,
   Spinner,
+  FeatureUnavailableCard,
   StatCard,
   StatusBadge,
   Toggle,
@@ -64,6 +65,8 @@ import {
   SAMPLE_TEXT,
   type BulkFilters,
 } from "@/lib/uiTypes";
+import { useServerStatus } from "@/lib/useServerStatus";
+import { tryPrimary } from "@/lib/api";
 
 function ResultsTable({
   rows,
@@ -776,6 +779,11 @@ export function VerifyBulkTab({
   initialEmails: string[];
   meta: ServerMeta | null;
 }) {
+  // Capability gate must come from a hook (Rules of Hooks: every render
+  // must call the same hooks in the same order). We render the maintenance
+  // card from a render-phase ``if`` *after* all other hooks have run.
+  const serverStatus = useServerStatus();
+  const [bulkRetrying, setBulkRetrying] = useState(false);
   const [text, setText] = useState(initialEmails.join("\n"));
   const [checkMx, setCheckMx] = useState(true);
   const [checkSmtp, setCheckSmtp] = useState(false);
@@ -959,6 +967,46 @@ export function VerifyBulkTab({
 
   const total = progress.total || results.length;
   const pct = total ? Math.round((progress.processed / total) * 100) : 0;
+
+  // ``bulk_jobs`` is the gating capability — tier-4 / serverless deploys
+  // disable it and the entire upload flow would 503. Show a maintenance
+  // card instead so the user understands *why* and what to do next.
+  const bulkAvailable = serverStatus.capabilities?.bulk_jobs !== false;
+  if (!bulkAvailable) {
+    return (
+      <div className="space-y-4">
+        <FeatureUnavailableCard
+          Icon={ShieldAlert}
+          title="Bulk verification paused"
+          message={
+            <>
+              The main server is offline, so the app is running on{" "}
+              <strong>
+                {serverStatus.deployLabel ?? "the single-only fallback"}
+              </strong>{" "}
+              — this backup can only handle one email at a time. Bulk uploads,
+              CSV/XLSX processing, and async jobs are paused until the primary
+              server is back online.
+              <br />
+              <span className="block mt-2 text-orange-100/70">
+                মেইন সার্ভার মেইনটেন্যান্সে আছে — শুধু single email
+                verification কাজ করছে। কিছুক্ষণ পর আবার চেষ্টা করুন।
+              </span>
+            </>
+          }
+          retrying={bulkRetrying}
+          onRetry={async () => {
+            setBulkRetrying(true);
+            try {
+              await tryPrimary();
+            } finally {
+              setBulkRetrying(false);
+            }
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

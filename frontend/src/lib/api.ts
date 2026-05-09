@@ -83,6 +83,25 @@ export interface JobStatus {
   results: VerifyResult[] | null;
 }
 
+export interface ServerCapabilities {
+  /** Sync single-email verification (`/api/verify`). Always true. */
+  single_verify: boolean;
+  /** Email extraction from text/files (`/api/extract*`). Always true. */
+  extract: boolean;
+  /** Pre-clean (`/api/clean`). Always true. */
+  clean: boolean;
+  /** Sync bulk verification (`/api/verify-bulk`, capped per tier). */
+  bulk_sync: boolean;
+  /** Async upload jobs (`/api/jobs/*`). Off on tier-4/serverless deploys. */
+  bulk_jobs: boolean;
+  /** Live SMTP probe. Off on tier-4 and unless server opted in via env. */
+  smtp_probe: boolean;
+  /** Command-center dashboard, depends on the in-memory job registry. */
+  dashboard: boolean;
+  /** Personal API key management. Always true (Firestore-backed). */
+  api_keys: boolean;
+}
+
 export interface ServerMeta {
   supported_extensions: string[];
   max_upload_bytes: number;
@@ -92,6 +111,9 @@ export interface ServerMeta {
   download_formats: string[];
   deploy_mode?: "primary" | "fallback";
   is_fallback?: boolean;
+  deploy_tier?: number;
+  deploy_label?: string;
+  capabilities?: ServerCapabilities;
 }
 
 export interface ServerVersion {
@@ -106,6 +128,9 @@ export interface ServerVersion {
   firebase_init_error: string | null;
   deploy_mode?: "primary" | "fallback";
   is_fallback?: boolean;
+  deploy_tier?: number;
+  deploy_label?: string;
+  capabilities?: ServerCapabilities;
 }
 
 export type ExportFormat = "csv" | "xlsx" | "txt" | "json";
@@ -211,86 +236,166 @@ export interface UserProfile {
 }
 
 // ---------------------------------------------------------------------------
-// API base + automatic failover (primary VPS  ─►  Vercel fallback)
+// API base + automatic N-tier load balancer / failover
 // ---------------------------------------------------------------------------
 //
-// Two URLs configurable via env at build time:
-//   VITE_API_URL          - long-lived primary backend (e.g. Azure VPS)
-//   VITE_API_FALLBACK_URL - short-lived shim (e.g. Vercel serverless) that
-//                           takes over when the primary is unreachable.
+// Build-time configuration. ONE of the following:
 //
-// Both default to window.location.origin so a single-host deploy still works
-// out of the box. When primary and fallback resolve to the same origin we
-// disable failover (there's nothing to fail over to).
+//   VITE_API_URLS     — comma-separated list of backend base URLs, in
+//                       priority order. The first URL is the primary; the
+//                       rest are fallbacks. Example:
+//                         "https://api.example.com,https://x.fly.dev,/"
+//
+//   VITE_API_URL +    — legacy two-tier config. Still honoured for back
+//   VITE_API_FALLBACK   compat: equivalent to VITE_API_URLS=<API_URL>,
+//   _URL                <FALLBACK_URL>.
+//
+// If neither is set, we use ``window.location.origin`` (single-host deploy).
 //
 // Runtime behaviour:
-//   * `request()` always hits `currentBase`. Default is primary.
-//   * `probeHealth()` pings primary's /healthz; if it fails 2x in a row we
-//      flip currentBase -> fallback and broadcast `{ mode: "fallback" }`.
-//   * While on fallback, probeHealth keeps retrying primary; on first
-//      success we flip back and broadcast `{ mode: "primary" }`.
+//   * Each target's ``/healthz`` is probed every ``intervalMs`` (default 15s).
+//   * The active target is the highest-priority one that responded OK on
+//     the most recent probe. We flip targets immediately when a higher tier
+//     comes back online (no debounce needed for tier-up).
+//   * For tier-DOWN we require ``FAIL_BEFORE_FAILOVER`` consecutive misses
+//     so a single hiccup doesn't shove every user onto the fallback.
+//   * Each target self-reports its capabilities through ``/api/meta``. The
+//     UI uses ``serverStatus.capabilities`` to enable/disable features, so
+//     a single-only Vercel fallback automatically hides the bulk pages
+//     without a frontend rebuild.
 //
-// The UI subscribes to these events to show / clear the degraded banner.
+// The UI subscribes to status events to redraw the degraded banner.
 
-const RAW_BASE = import.meta.env.VITE_API_URL as string | undefined;
-const RAW_FALLBACK = import.meta.env.VITE_API_FALLBACK_URL as
-  | string
-  | undefined;
+export interface BackendTarget {
+  /** Trimmed base URL (no trailing slash). */
+  url: string;
+  /** Position in the priority list, 0 = primary. */
+  priority: number;
+  /** Last health-probe result. ``null`` until first probe completes. */
+  healthy: boolean | null;
+  /** Last `/api/version` payload from this target, if reachable. */
+  version: ServerVersion | null;
+  /** Effective capability matrix (mirrors ``version.capabilities``). */
+  capabilities: ServerCapabilities | null;
+  /** ms-since-epoch of the last completed probe. */
+  lastProbeAt: number | null;
+  /** Last probe error message, for debug UI. */
+  lastError: string | null;
+  /** Number of consecutive failed probes since the last success. */
+  consecutiveFails: number;
+}
 
-const PRIMARY_BASE =
-  (RAW_BASE && RAW_BASE.trim()) || window.location.origin;
-const FALLBACK_BASE =
-  (RAW_FALLBACK && RAW_FALLBACK.trim()) || PRIMARY_BASE;
+function _parseTargets(): BackendTarget[] {
+  const list = (
+    (import.meta.env.VITE_API_URLS as string | undefined) || ""
+  )
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-const FAILOVER_AVAILABLE =
-  PRIMARY_BASE.replace(/\/$/, "") !== FALLBACK_BASE.replace(/\/$/, "");
+  if (list.length === 0) {
+    const primary = (
+      (import.meta.env.VITE_API_URL as string | undefined) || ""
+    ).trim();
+    const fallback = (
+      (import.meta.env.VITE_API_FALLBACK_URL as string | undefined) || ""
+    ).trim();
+    if (primary) list.push(primary);
+    if (fallback && fallback !== primary) list.push(fallback);
+  }
 
-let _currentBase = PRIMARY_BASE;
-/** Backwards-compatible export — still readable by old callers, but mutable
- *  here. New code should prefer `getApiBase()` to always read the live value.
- */
-export let API_BASE: string = _currentBase;
+  if (list.length === 0) list.push(window.location.origin);
 
-function setCurrentBase(next: string) {
-  if (next === _currentBase) return;
-  _currentBase = next;
-  API_BASE = next;
+  // Dedupe (treat trailing-slash-only differences as the same target).
+  const seen = new Set<string>();
+  const targets: BackendTarget[] = [];
+  for (const raw of list) {
+    const url = raw.replace(/\/+$/, "");
+    if (seen.has(url)) continue;
+    seen.add(url);
+    targets.push({
+      url,
+      priority: targets.length,
+      healthy: targets.length === 0 ? true : null, // optimistic on primary
+      version: null,
+      capabilities: null,
+      lastProbeAt: null,
+      lastError: null,
+      consecutiveFails: 0,
+    });
+  }
+  return targets;
+}
+
+const _targets: BackendTarget[] = _parseTargets();
+let _activeIndex = 0;
+
+/** Backwards-compat: still mutable, still readable. New code should use
+ *  ``getApiBase()`` so it always sees the live value after a failover. */
+export let API_BASE: string = _targets[0].url;
+
+function setActive(index: number) {
+  if (index === _activeIndex) return;
+  _activeIndex = index;
+  API_BASE = _targets[index].url;
 }
 
 export function getApiBase(): string {
-  return _currentBase;
+  return _targets[_activeIndex].url;
 }
 
+/** Backwards-compat type. ``"primary"`` means the highest-priority target
+ *  is active; ``"fallback"`` means we've flipped to a lower tier. */
 export type ServerMode = "primary" | "fallback";
 
 export interface ServerStatus {
-  /** Which base URL the client is currently routing through. */
+  /** Coarse mode kept for the existing banner code paths. */
   mode: ServerMode;
-  /** Last health-probe outcome for the *primary* server. */
-  primaryHealthy: boolean;
-  /** Whether failover is even configured (i.e. primary !== fallback). */
+  /** Index into ``targets`` that we're currently routing through. */
+  activeIndex: number;
+  /** All configured targets with their latest probe state. */
+  targets: BackendTarget[];
+  /** True when at least one fallback target is configured. */
   failoverAvailable: boolean;
-  /** Last `/api/version` payload from the live server. Useful for badge UI. */
+  /** Whether the highest-priority target is currently healthy. */
+  primaryHealthy: boolean;
+  /** Last `/api/version` payload from the *active* target. */
   version: ServerVersion | null;
-  /** ms since epoch of the last successful probe (either side). */
+  /** Capability matrix of the *active* target. ``null`` if no probe yet. */
+  capabilities: ServerCapabilities | null;
+  /** Deploy tier (1-4) of the active target, ``null`` if unknown. */
+  deployTier: number | null;
+  /** Human label of the active target ("Primary", "Fly.io backup", …). */
+  deployLabel: string | null;
+  /** ms-since-epoch of the last completed probe across all targets. */
   lastProbeAt: number | null;
-  /** Last error message we saw probing primary (for debug UI). */
+  /** Last probe error from the highest-priority target. */
   lastError: string | null;
 }
 
-let _status: ServerStatus = {
-  mode: "primary",
-  primaryHealthy: true,
-  failoverAvailable: FAILOVER_AVAILABLE,
-  version: null,
-  lastProbeAt: null,
-  lastError: null,
-};
+function _computeStatus(): ServerStatus {
+  const active = _targets[_activeIndex];
+  const primary = _targets[0];
+  return {
+    mode: _activeIndex === 0 ? "primary" : "fallback",
+    activeIndex: _activeIndex,
+    targets: _targets.map((t) => ({ ...t })), // shallow snapshots
+    failoverAvailable: _targets.length > 1,
+    primaryHealthy: primary.healthy === true,
+    version: active.version,
+    capabilities: active.capabilities,
+    deployTier: active.version?.deploy_tier ?? null,
+    deployLabel: active.version?.deploy_label ?? null,
+    lastProbeAt: active.lastProbeAt,
+    lastError: primary.lastError,
+  };
+}
 
+let _status: ServerStatus = _computeStatus();
 const _statusSubs = new Set<(s: ServerStatus) => void>();
 
-function setStatus(patch: Partial<ServerStatus>) {
-  _status = { ..._status, ...patch };
+function _emitStatus() {
+  _status = _computeStatus();
   _statusSubs.forEach((fn) => {
     try {
       fn(_status);
@@ -314,92 +419,27 @@ export function subscribeServerStatus(
   };
 }
 
-/** Manually flip back to primary. Useful for the "retry now" button. */
+/** Manually re-probe the highest-priority target and snap back to it if it's
+ *  healthy. Used by the "Try primary again" banner button. */
 export async function tryPrimary(): Promise<boolean> {
-  const ok = await rawProbe(PRIMARY_BASE);
+  const ok = await _probeOne(_targets[0]);
   if (ok) {
-    setCurrentBase(PRIMARY_BASE);
-    setStatus({
-      mode: "primary",
-      primaryHealthy: true,
-      lastProbeAt: Date.now(),
-      lastError: null,
-    });
+    setActive(0);
+    _emitStatus();
   }
   return ok;
 }
 
-async function rawProbe(base: string, signal?: AbortSignal): Promise<boolean> {
+async function _rawProbe(base: string, signal?: AbortSignal): Promise<boolean> {
   try {
-    const res = await fetch(`${base}/healthz`, {
-      method: "GET",
-      signal,
-      // healthz is public, no auth header.
-    });
+    const res = await fetch(`${base}/healthz`, { method: "GET", signal });
     return res.ok;
   } catch {
     return false;
   }
 }
 
-let _consecutivePrimaryFails = 0;
-const FAIL_BEFORE_FAILOVER = 2; // require 2 misses to flip
-
-async function probeHealth(): Promise<void> {
-  const ok = await rawProbe(PRIMARY_BASE);
-  if (ok) {
-    _consecutivePrimaryFails = 0;
-    if (_currentBase !== PRIMARY_BASE) {
-      // primary is back — flip up. Re-fetch /api/version for the badge.
-      setCurrentBase(PRIMARY_BASE);
-      const ver = await fetchVersion(PRIMARY_BASE).catch(() => null);
-      setStatus({
-        mode: "primary",
-        primaryHealthy: true,
-        lastProbeAt: Date.now(),
-        lastError: null,
-        version: ver,
-      });
-    } else {
-      setStatus({
-        primaryHealthy: true,
-        lastProbeAt: Date.now(),
-        lastError: null,
-      });
-    }
-    return;
-  }
-
-  // primary failed
-  _consecutivePrimaryFails += 1;
-  if (
-    FAILOVER_AVAILABLE &&
-    _consecutivePrimaryFails >= FAIL_BEFORE_FAILOVER &&
-    _currentBase !== FALLBACK_BASE
-  ) {
-    const fallbackOk = await rawProbe(FALLBACK_BASE);
-    if (fallbackOk) {
-      setCurrentBase(FALLBACK_BASE);
-      const ver = await fetchVersion(FALLBACK_BASE).catch(() => null);
-      setStatus({
-        mode: "fallback",
-        primaryHealthy: false,
-        lastProbeAt: Date.now(),
-        lastError: "primary unreachable",
-        version: ver,
-      });
-      return;
-    }
-  }
-
-  setStatus({
-    primaryHealthy: false,
-    lastProbeAt: Date.now(),
-    lastError: "primary unreachable",
-  });
-}
-
-async function fetchVersion(base: string): Promise<ServerVersion | null> {
+async function _fetchVersion(base: string): Promise<ServerVersion | null> {
   try {
     const res = await fetch(`${base}/api/version`);
     if (!res.ok) return null;
@@ -409,15 +449,62 @@ async function fetchVersion(base: string): Promise<ServerVersion | null> {
   }
 }
 
+const FAIL_BEFORE_FAILOVER = 2; // require 2 consecutive misses to flip down
+
+/** Probe a single target and update its slot. Returns the new healthy flag. */
+async function _probeOne(t: BackendTarget): Promise<boolean> {
+  const ok = await _rawProbe(t.url);
+  t.lastProbeAt = Date.now();
+  if (ok) {
+    t.healthy = true;
+    t.consecutiveFails = 0;
+    t.lastError = null;
+    // Refresh version + capabilities lazily — only when missing or every 5
+    // probes, to keep the dashboard badge in sync without flooding.
+    if (!t.version || (t.lastProbeAt % 5 < 1)) {
+      t.version = await _fetchVersion(t.url);
+      t.capabilities = t.version?.capabilities ?? null;
+    }
+  } else {
+    t.consecutiveFails += 1;
+    t.lastError = "unreachable";
+    if (t.consecutiveFails >= FAIL_BEFORE_FAILOVER) {
+      t.healthy = false;
+    }
+  }
+  return ok;
+}
+
+async function _probeAll(): Promise<void> {
+  // Probe everything in parallel — fast, and keeps higher-priority targets'
+  // recovery latency low.
+  await Promise.all(_targets.map((t) => _probeOne(t)));
+  _selectActive();
+  _emitStatus();
+}
+
+/** Pick the highest-priority healthy target. If none look healthy yet (first
+ *  probe still pending), keep the current active so we don't blank the UI. */
+function _selectActive() {
+  for (let i = 0; i < _targets.length; i++) {
+    if (_targets[i].healthy === true) {
+      setActive(i);
+      return;
+    }
+  }
+  // Nothing is healthy. Keep the current active; the request layer will
+  // surface the failure to the caller.
+}
+
 let _probeTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Start the background health-probe loop. Idempotent. */
 export function startHealthProbe(intervalMs = 15_000): () => void {
   if (_probeTimer) return () => {};
   // first probe right away so the banner reflects truth on page load
-  void probeHealth();
+  void _probeAll();
   _probeTimer = setInterval(() => {
-    void probeHealth();
+    void _probeAll();
   }, intervalMs);
   return () => {
     if (_probeTimer) {

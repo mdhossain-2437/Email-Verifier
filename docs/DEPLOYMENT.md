@@ -23,7 +23,7 @@ There is also a [troubleshooting](#troubleshooting) section at the bottom.
 
 | Thing | Where it comes from | Notes |
 |---|---|---|
-| GitHub repo | https://github.com/mdhossaindelowardev/Email-Verifier | Read-only is fine |
+| GitHub repo | https://github.com/mdhossain-2437/Email-Verifier | Read-only is fine |
 | Domain name | your registrar (Namecheap, Cloudflare, etc.) | e.g. `verifier.yourdomain.com` |
 | **Firebase Web SDK config** | Firebase Console → Project settings → Your apps → Web | 6 fields. Public. Goes in `frontend/.env`. |
 | **Firebase Admin SDK JSON** | Firebase Console → Project settings → Service accounts → "Generate new private key" | Server-side only. Treat as a credential. |
@@ -78,7 +78,7 @@ the VM, then:
 
 ```bash
 sudo apt-get update && sudo apt-get install -y git curl
-git clone https://github.com/mdhossaindelowardev/Email-Verifier.git /tmp/email-verifier-bootstrap
+git clone https://github.com/mdhossain-2437/Email-Verifier.git /tmp/email-verifier-bootstrap
 cd /tmp/email-verifier-bootstrap
 
 sudo \

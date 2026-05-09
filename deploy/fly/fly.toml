@@ -1,0 +1,52 @@
+# Fly.io app config for the Email Verifier backend (tier 2 — full-feature
+# backup). Deploy with:
+#
+#   fly launch --config deploy/fly/fly.toml --copy-config --dockerfile deploy/fly/Dockerfile --name <your-app-name>
+#   # then on every push:
+#   fly deploy --config deploy/fly/fly.toml --dockerfile deploy/fly/Dockerfile
+#
+# Don't forget to set the same secrets the Azure VPS uses:
+#
+#   fly secrets set --app <your-app-name> \
+#     EMAIL_VERIFIER_ALLOWED_ORIGINS=https://your-frontend.example.com \
+#     EMAIL_VERIFIER_ENABLE_SMTP=false \
+#     EMAIL_VERIFIER_AUTH_REQUIRED=true \
+#     # ... plus any Firebase service-account JSON via FIREBASE_CREDENTIALS.
+
+# NOTE: ``app`` is intentionally left as a placeholder — Fly auto-fills it
+# from `--name` on the first deploy. Don't hard-code your real name into
+# this file (it ends up in git).
+app = "email-verifier-fly-PLACEHOLDER"
+primary_region = "iad"  # change to your closest Fly region
+kill_signal = "SIGINT"
+kill_timeout = "5s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  WEB_CONCURRENCY = "1"
+  EMAIL_VERIFIER_DEPLOY_TIER = "2"
+  EMAIL_VERIFIER_DEPLOY_LABEL = "Fly.io backup"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Keep at least one machine warm so the frontend's /healthz probe never
+  # cold-starts (which is what tier-3 is for, not tier-2).
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/healthz"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256
