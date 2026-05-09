@@ -8,7 +8,13 @@ Type=simple
 # install.sh writes a drop-in at
 #   /etc/systemd/system/email-verifier.service.d/override.conf
 # with User, Group, WorkingDirectory, APP_DIR, and EnvironmentFile.
-ExecStart=/usr/local/bin/poetry run uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2
+#
+# IMPORTANT: keep --workers 1 until the async-job registry is moved out of
+# process memory. The current implementation stores jobs in a process-local
+# dict (app.main._JOBS); with multiple workers, jobs submitted to worker A
+# silently 404 when polled by worker B. See README "Operations" notes for
+# the full story and the planned Firestore-backed migration.
+ExecStart=/usr/local/bin/poetry run uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=20

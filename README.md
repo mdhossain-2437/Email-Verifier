@@ -264,6 +264,12 @@ Output:
 | `FIREBASE_ADMIN_CREDENTIALS` | _unset_ | Service-account JSON. **Required** — without it, every protected route returns 503. |
 | `EMAIL_VERIFIER_MAX_UPLOAD_BYTES` | `0` | Upload cap, in bytes. `0` = unbounded. |
 | `EMAIL_VERIFIER_ENABLE_SMTP` | `false` | Allow live SMTP probing. Most clouds block port 25 outbound. |
+| `EMAIL_VERIFIER_ALLOWED_ORIGINS` | localhost dev origins | Comma-separated CORS allowlist (e.g. `https://app.example.com,https://staging.example.com`). Setting `*` falls back to wildcard mode and **disables credentialed requests** (per CORS spec). When unset, only the standard Vite/uvicorn dev origins are allowed. |
+| `EMAIL_VERIFIER_MX_CACHE_TTL` | `600` | TTL (seconds) for the MX-record lookup cache. |
+| `EMAIL_VERIFIER_DOMAIN_CACHE_TTL` | `1800` | TTL (seconds) for the "does this domain resolve at all?" cache. |
+| `EMAIL_VERIFIER_SMTP_CACHE_TTL` | `300` | TTL (seconds) for cached SMTP probe outcomes. |
+| `EMAIL_VERIFIER_CACHE_MAXSIZE` | `4096` | Hard upper bound on entries per cache (LRU-evicted past this). |
+| `WEB_CONCURRENCY` | `1` | Set to `1`. The job registry is in-memory and **does not** survive being sharded across multiple workers — uploads to one worker would be invisible to the others. The systemd unit pins `--workers 1`; if you set this higher the app logs a loud warning at startup. |
 
 ### Frontend env vars (set in `frontend/.env` or your host's UI)
 
