@@ -39,6 +39,7 @@ from pydantic import BaseModel, Field
 from .disposable import is_disposable, is_role
 from .extractor import extract_emails, extract_unique
 from .files import extract_from_file, supported_extensions
+from .lead_finder import LeadInput, verify_lead
 from .locale import country_for_domain
 from .providers import provider_for_domain
 from .verifier import VerificationResult, verify_email, verify_many
@@ -197,6 +198,53 @@ class JobStatusResponse(BaseModel):
     results: Optional[list[dict]] = None
 
 
+class LeadFinderTarget(BaseModel):
+    """One target the operator wants to find a work email for."""
+
+    name: str = Field(..., description="Person's full name (e.g. 'Jane Doe').")
+    company: Optional[str] = Field(
+        None, description="Company name. Display-only — not used for guessing."
+    )
+    domain: str = Field(
+        ...,
+        description="Company email domain (e.g. 'acme.com'). The user must "
+        "supply this — we do not scrape it from anywhere.",
+    )
+
+
+class LeadFinderRequest(BaseModel):
+    targets: list[LeadFinderTarget] = Field(..., min_length=1)
+    check_mx: bool = True
+    check_smtp: bool = False
+
+
+class LeadFinderCandidate(BaseModel):
+    pattern: str
+    email: str
+    confidence: float
+    status: str
+    reason: Optional[str] = None
+    has_mx: Optional[bool] = None
+
+
+class LeadFinderResultRow(BaseModel):
+    name: str
+    company: Optional[str] = None
+    domain: str
+    best_email: Optional[str] = None
+    best_pattern: Optional[str] = None
+    best_status: Optional[str] = None
+    best_confidence: Optional[float] = None
+    candidates: list[LeadFinderCandidate]
+    notes: list[str]
+
+
+class LeadFinderResponse(BaseModel):
+    count: int
+    elapsed_ms: float
+    results: list[LeadFinderResultRow]
+
+
 # ---------------------------------------------------------------------------
 # Job registry (in-memory)
 # ---------------------------------------------------------------------------
@@ -250,6 +298,94 @@ async def meta_endpoint():
         "max_job_inputs": MAX_JOB_INPUTS,
         "result_columns": _RESULT_COLUMNS,
         "download_formats": list(_FORMAT_MEDIA.keys()),
+    }
+
+
+@app.get("/api/dashboard")
+async def dashboard_endpoint():
+    """Aggregate stats across the in-memory job registry for the Command
+    Center dashboard. Everything surfaced here is real — we never fake
+    numbers. When no jobs have run yet, totals are 0 and the recent_jobs
+    list is empty (the UI handles the empty state)."""
+    started = time.perf_counter()
+    jobs = list(_JOBS.values())
+
+    total_processed = sum(j.processed for j in jobs)
+    total_valid = sum(j.summary.get("valid", 0) for j in jobs)
+    total_invalid = sum(j.summary.get("invalid", 0) for j in jobs)
+    total_risky = sum(j.summary.get("risky", 0) for j in jobs)
+    total_unknown = sum(j.summary.get("unknown", 0) for j in jobs)
+
+    success_rate = (total_valid / total_processed * 100.0) if total_processed else 0.0
+
+    active_jobs = [j for j in jobs if j.status in ("queued", "running")]
+    rows_in_flight = sum(j.total - j.processed for j in active_jobs)
+
+    # 7-day verification volume: bucket finished_at timestamps into UTC days.
+    now = time.time()
+    one_day = 24 * 3600
+    buckets = [0] * 7
+    for j in jobs:
+        ts = j.finished_at or j.started_at
+        if not ts:
+            continue
+        delta_days = int((now - ts) // one_day)
+        if 0 <= delta_days < 7:
+            # 0 = today, 6 = oldest. Reverse so oldest is at index 0.
+            buckets[6 - delta_days] += j.processed
+
+    # Live feed: most recent results across all jobs, newest first.
+    live: list[dict] = []
+    for j in sorted(
+        jobs, key=lambda x: x.finished_at or x.started_at or 0, reverse=True
+    ):
+        for r in reversed(j.results[-10:]):
+            live.append(
+                {
+                    "email": r.get("email", ""),
+                    "status": r.get("status", "unknown"),
+                    "domain": r.get("domain"),
+                    "job_id": j.id,
+                    "ts": j.finished_at or j.started_at,
+                }
+            )
+            if len(live) >= 12:
+                break
+        if len(live) >= 12:
+            break
+
+    # Recent jobs list (newest first, capped to 8).
+    recent: list[dict] = []
+    for j in sorted(
+        jobs, key=lambda x: x.started_at or 0, reverse=True
+    )[:8]:
+        recent.append(
+            {
+                "job_id": j.id,
+                "status": j.status,
+                "total": j.total,
+                "processed": j.processed,
+                "summary": j.summary,
+                "started_at": j.started_at,
+                "finished_at": j.finished_at,
+            }
+        )
+
+    return {
+        "total_verified": total_processed,
+        "total_valid": total_valid,
+        "total_invalid": total_invalid,
+        "total_risky": total_risky,
+        "total_unknown": total_unknown,
+        "success_rate": round(success_rate, 2),
+        "active_jobs": len(active_jobs),
+        "rows_in_flight": rows_in_flight,
+        "total_jobs": len(jobs),
+        "volume_7d": buckets,
+        "live_feed": live,
+        "recent_jobs": recent,
+        "api_health": "operational",
+        "elapsed_ms": (time.perf_counter() - started) * 1000,
     }
 
 
@@ -699,6 +835,70 @@ async def _serve_job_results(job_id: str, fmt: str, status: Optional[str]):
     data = _results_to_xlsx(flat)
     return StreamingResponse(
         iter([data]), media_type=_FORMAT_MEDIA[fmt], headers=headers
+    )
+
+
+@app.post("/api/lead-finder", response_model=LeadFinderResponse)
+async def lead_finder_endpoint(req: LeadFinderRequest):
+    """Find probable work emails for a list of (name, company, domain)
+    targets. **The operator supplies the targets.** This endpoint will
+    not, and is not designed to, harvest names or domains from anywhere
+    on the public web — that path is intentionally absent.
+
+    For each target we generate the ~15 most common corporate email
+    patterns (firstname.lastname@, flast@, first@, etc.), verify the
+    top candidates with the same MX / SMTP pipeline as the rest of the
+    app, and return the best match per target ranked by confidence.
+    """
+    started = time.perf_counter()
+    leads = [
+        LeadInput(name=t.name, company=t.company, domain=t.domain)
+        for t in req.targets
+    ]
+    results = await asyncio.gather(
+        *(
+            verify_lead(
+                lead,
+                check_mx=req.check_mx,
+                check_smtp=req.check_smtp,
+            )
+            for lead in leads
+        )
+    )
+    rows: list[LeadFinderResultRow] = []
+    for lead_result in results:
+        candidates = [
+            LeadFinderCandidate(
+                pattern=c.pattern,
+                email=c.email,
+                confidence=c.confidence,
+                status=c.verification.status if c.verification else "unknown",
+                reason=c.verification.reason if c.verification else None,
+                has_mx=c.verification.has_mx if c.verification else None,
+            )
+            for c in lead_result.candidates
+        ]
+        best = lead_result.best
+        rows.append(
+            LeadFinderResultRow(
+                name=lead_result.input.name,
+                company=lead_result.input.company,
+                domain=lead_result.input.domain,
+                best_email=best.email if best else None,
+                best_pattern=best.pattern if best else None,
+                best_status=(
+                    best.verification.status if best and best.verification else None
+                ),
+                best_confidence=best.confidence if best else None,
+                candidates=candidates,
+                notes=lead_result.notes,
+            )
+        )
+
+    return LeadFinderResponse(
+        count=len(rows),
+        elapsed_ms=(time.perf_counter() - started) * 1000,
+        results=rows,
     )
 
 

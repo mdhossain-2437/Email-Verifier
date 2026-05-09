@@ -7,38 +7,52 @@ import {
   type ReactNode,
 } from "react";
 import {
+  Activity,
   AlertTriangle,
+  ArrowUpRight,
+  BarChart3,
+  Bell,
   CheckCircle2,
+  Code2,
   Copy,
+  Database,
   Download,
   ExternalLink,
-  FileText,
   Filter,
   Github,
   Globe,
   HelpCircle,
   Heart,
+  LayoutDashboard,
   Loader2,
   Mail,
+  Plus,
   Search,
   ServerCog,
   Settings2,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Store,
   Trash2,
   Upload,
+  Users,
   X,
   XCircle,
   Zap,
 } from "lucide-react";
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import "./App.css";
 import {
   api,
   type CleanedEmail,
   type CleanResponse,
+  type DashboardSnapshot,
   type ExportFormat,
   type JobStatus,
+  type LeadFinderCandidate,
+  type LeadFinderResultRow,
+  type LeadFinderTarget,
   type ServerMeta,
   type Status,
   type VerifyResult,
@@ -50,7 +64,15 @@ import {
   resultsToTxt,
 } from "./lib/csv";
 
-type Tab = "extract" | "verify-bulk" | "verify-one" | "api" | "about";
+type Tab =
+  | "command-center"
+  | "verify-bulk"
+  | "lead-finder"
+  | "extract"
+  | "verify-one"
+  | "tools"
+  | "api"
+  | "about";
 
 const STATUS_META: Record<Status, { label: string; cls: string; icon: typeof CheckCircle2 }> = {
   valid: {
@@ -1908,187 +1930,1226 @@ function AboutTab({ meta }: { meta: ServerMeta | null }) {
   );
 }
 
-function FeatureCard({
-  icon: Icon,
-  title,
-  body,
-}: {
+
+// ---------------------------------------------------------------------------
+// v3 Premium Shell — sidebar + topbar + page header + content area
+// ---------------------------------------------------------------------------
+
+interface NavItem {
+  key: Tab;
+  label: string;
+  sublabel: string;
   icon: typeof Sparkles;
-  title: string;
-  body: string;
+}
+
+const NAV: NavItem[] = [
+  { key: "command-center", label: "Dashboard", sublabel: "Command Center", icon: LayoutDashboard },
+  { key: "verify-bulk", label: "Dataset", sublabel: "Mass Processing", icon: Database },
+  { key: "lead-finder", label: "Lead Finder", sublabel: "Pattern Discovery", icon: Users },
+  { key: "extract", label: "Extractor", sublabel: "Text & Files", icon: Sparkles },
+  { key: "verify-one", label: "Inspector", sublabel: "Single Verify", icon: Filter },
+  { key: "tools", label: "Marketplace", sublabel: "Utility Tools", icon: Store },
+  { key: "api", label: "API", sublabel: "REST Reference", icon: Code2 },
+  { key: "about", label: "About", sublabel: "Credits & Limits", icon: Heart },
+];
+
+function Sidebar({
+  active,
+  onSelect,
+  open,
+  onClose,
+}: {
+  active: Tab;
+  onSelect: (k: Tab) => void;
+  open: boolean;
+  onClose: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
-      <div className="w-9 h-9 rounded-lg bg-indigo-500/15 text-indigo-300 grid place-items-center">
-        <Icon className="w-4 h-4" />
+    <>
+      {/* Mobile backdrop */}
+      <div
+        onClick={onClose}
+        className={`lg:hidden fixed inset-0 z-30 bg-black/60 backdrop-blur-sm transition-opacity ${
+          open ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+      />
+      <aside
+        className={`fixed lg:sticky top-0 z-40 h-screen w-64 shrink-0 border-r border-white/5 bg-[#080a12]/90 backdrop-blur-xl flex flex-col transition-transform ${
+          open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        }`}
+      >
+        <div className="px-5 pt-6 pb-5 border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 via-sky-400 to-emerald-400 grid place-items-center text-[#0b0d18] font-semibold text-sm shadow-lg">
+              DH
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-white leading-tight truncate">
+                Delowar Hossain
+              </div>
+              <div className="text-[11px] text-indigo-300/80 leading-tight">Enterprise Plan</div>
+            </div>
+          </div>
+          <button
+            onClick={() => window.open(GITHUB_REPO, "_blank")}
+            className="mt-4 w-full rounded-lg bg-gradient-to-br from-indigo-500/90 to-sky-500/90 hover:from-indigo-400 hover:to-sky-400 transition-colors text-white text-sm font-medium py-2.5 shadow-lg shadow-indigo-500/20"
+          >
+            Upgrade to Pro
+          </button>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+          {NAV.map((item) => {
+            const Icon = item.icon;
+            const isActive = active === item.key;
+            return (
+              <button
+                key={item.key}
+                onClick={() => {
+                  onSelect(item.key);
+                  onClose();
+                }}
+                className={`group w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                  isActive
+                    ? "bg-indigo-500/15 text-white border-l-2 border-indigo-400 pl-[10px]"
+                    : "text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
+                }`}
+              >
+                <Icon
+                  className={`w-4 h-4 shrink-0 ${
+                    isActive ? "text-indigo-300" : "text-zinc-500 group-hover:text-zinc-300"
+                  }`}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium leading-tight truncate">{item.label}</div>
+                  <div className="text-[11px] text-zinc-500 leading-tight truncate">
+                    {item.sublabel}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="px-4 py-4 border-t border-white/5 space-y-1.5 text-xs">
+          <a
+            href={GITHUB_REPO}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 text-zinc-400 hover:text-white px-2 py-1.5 rounded-lg hover:bg-white/5"
+          >
+            <Github className="w-3.5 h-3.5" />
+            GitHub
+          </a>
+          <a
+            href={PORTFOLIO_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 text-zinc-400 hover:text-white px-2 py-1.5 rounded-lg hover:bg-white/5"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            Portfolio
+          </a>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function Topbar({
+  onMenu,
+  onJump,
+  onNew,
+}: {
+  onMenu: () => void;
+  onJump: (q: string) => void;
+  onNew: () => void;
+}) {
+  const [q, setQ] = useState("");
+  return (
+    <header className="sticky top-0 z-20 backdrop-blur-xl bg-[#080a12]/85 border-b border-white/5 px-4 sm:px-6 py-3 flex items-center gap-3">
+      <button
+        onClick={onMenu}
+        className="lg:hidden p-2 rounded-lg text-zinc-400 hover:bg-white/5"
+        aria-label="open menu"
+      >
+        <Filter className="w-4 h-4" />
+      </button>
+      <div className="font-semibold text-white tracking-tight whitespace-nowrap">
+        <span className="text-indigo-300">Delowar&apos;s</span> Email Verifier
       </div>
-      <div className="mt-3 text-zinc-100 font-medium">{title}</div>
-      <div className="mt-1 text-sm text-zinc-400">{body}</div>
+      <div className="flex-1 hidden sm:flex justify-center px-4">
+        <div className="relative w-full max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onJump(q);
+            }}
+            placeholder="Search jobs, emails, domains..."
+            className="w-full rounded-full border border-white/5 bg-white/[0.03] pl-9 pr-3 py-1.5 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-400/40 focus:bg-white/[0.06]"
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button
+          className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-indigo-400/40 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-200 px-3 py-1.5 text-sm font-medium transition-colors"
+          onClick={onNew}
+        >
+          <Plus className="w-3.5 h-3.5" />
+          New Job
+        </button>
+        <button
+          className="p-2 rounded-lg text-zinc-400 hover:bg-white/5 hover:text-white"
+          title="Notifications"
+          aria-label="notifications"
+        >
+          <Bell className="w-4 h-4" />
+        </button>
+        <a
+          href="/docs"
+          target="_blank"
+          rel="noreferrer"
+          className="p-2 rounded-lg text-zinc-400 hover:bg-white/5 hover:text-white"
+          title="API docs"
+          aria-label="docs"
+        >
+          <HelpCircle className="w-4 h-4" />
+        </a>
+        <button
+          className="p-2 rounded-lg text-zinc-400 hover:bg-white/5 hover:text-white"
+          title="Settings"
+          aria-label="settings"
+        >
+          <Settings2 className="w-4 h-4" />
+        </button>
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 via-sky-400 to-emerald-400 grid place-items-center text-[#0b0d18] font-semibold text-xs ml-1">
+          DH
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function PageHeader({
+  title,
+  subtitle,
+  cta,
+}: {
+  title: string;
+  subtitle: string;
+  cta?: ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
+      <div>
+        <h1 className="text-3xl sm:text-4xl font-semibold text-white tracking-tight">{title}</h1>
+        <p className="mt-1.5 text-sm text-zinc-400 max-w-2xl">{subtitle}</p>
+      </div>
+      {cta && <div className="shrink-0">{cta}</div>}
     </div>
   );
 }
 
+// ---------------------------------------------------------------------------
+// v3: Command Center dashboard
+// ---------------------------------------------------------------------------
+
+const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function formatBigNumber(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toLocaleString();
+}
+
+function relativeTime(ts: number | null): string {
+  if (!ts) return "—";
+  const diff = Math.max(0, Date.now() / 1000 - ts);
+  if (diff < 5) return "just now";
+  if (diff < 60) return `${Math.floor(diff)}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function jobLabel(jobId: string): string {
+  return `Job ${jobId.slice(0, 8)}`;
+}
+
+function DashboardTile({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: typeof Sparkles;
+  tone: "indigo" | "emerald" | "amber" | "sky";
+}) {
+  const toneText: Record<typeof tone, string> = {
+    indigo: "text-indigo-300",
+    emerald: "text-emerald-300",
+    amber: "text-amber-300",
+    sky: "text-sky-300",
+  };
+  const toneBg: Record<typeof tone, string> = {
+    indigo: "bg-indigo-500/10 ring-indigo-500/30",
+    emerald: "bg-emerald-500/10 ring-emerald-500/30",
+    amber: "bg-amber-500/10 ring-amber-500/30",
+    sky: "bg-sky-500/10 ring-sky-500/30",
+  };
+  return (
+    <div className="rounded-2xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.035] backdrop-blur p-5 transition-colors">
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 font-medium">
+            {label}
+          </div>
+          <div className="mt-2 text-3xl sm:text-4xl font-semibold text-white tabular-nums tracking-tight">
+            {value}
+          </div>
+        </div>
+        <div className={`w-9 h-9 rounded-full ring-1 grid place-items-center ${toneBg[tone]}`}>
+          <Icon className={`w-4 h-4 ${toneText[tone]}`} />
+        </div>
+      </div>
+      <div className={`mt-3 text-xs ${toneText[tone]} flex items-center gap-1`}>
+        <ArrowUpRight className="w-3 h-3" />
+        {detail}
+      </div>
+    </div>
+  );
+}
+
+function CommandCenterView({
+  meta,
+  onNewJob,
+}: {
+  meta: ServerMeta | null;
+  onNewJob: () => void;
+}) {
+  const [snap, setSnap] = useState<DashboardSnapshot | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let stop = false;
+    const tick = async () => {
+      try {
+        const s = await api.dashboard();
+        if (!stop) setSnap(s);
+      } catch (e) {
+        if (!stop) setError(e instanceof Error ? e.message : String(e));
+      }
+    };
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => {
+      stop = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  const volumeData = useMemo(() => {
+    const buckets = snap?.volume_7d ?? [0, 0, 0, 0, 0, 0, 0];
+    return DAY_LABELS.map((label, i) => ({ day: label, count: buckets[i] ?? 0 }));
+  }, [snap]);
+
+  const peakLabel = useMemo(() => {
+    if (!snap) return "0";
+    const peak = Math.max(...snap.volume_7d, 0);
+    return formatBigNumber(peak);
+  }, [snap]);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Command Center"
+        subtitle="Real-time overview of your verification ecosystem. Numbers below come from /api/dashboard — they reflect actual jobs run on this server, not demo data."
+        cta={
+          <PrimaryButton icon={Plus} onClick={onNewJob}>
+            New Job
+          </PrimaryButton>
+        }
+      />
+
+      {error && (
+        <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          dashboard fetch failed: {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <DashboardTile
+          label="Total Verified"
+          value={formatBigNumber(snap?.total_verified ?? 0)}
+          detail={`${snap?.total_valid ?? 0} valid · session-local`}
+          icon={Mail}
+          tone="indigo"
+        />
+        <DashboardTile
+          label="Extraction Success"
+          value={`${(snap?.success_rate ?? 0).toFixed(1)}%`}
+          detail={`Across ${snap?.total_jobs ?? 0} jobs`}
+          icon={CheckCircle2}
+          tone="emerald"
+        />
+        <DashboardTile
+          label="API Health"
+          value={snap?.api_health === "operational" ? "Operational" : "—"}
+          detail={`${meta?.max_job_inputs?.toLocaleString() ?? "—"} per job`}
+          icon={ShieldCheck}
+          tone="sky"
+        />
+        <DashboardTile
+          label="Active Jobs"
+          value={String(snap?.active_jobs ?? 0)}
+          detail={`Processing ${formatBigNumber(snap?.rows_in_flight ?? 0)} rows`}
+          icon={Activity}
+          tone="amber"
+        />
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-4">
+        <div className="rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-base font-semibold text-white">Live Feed</div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 text-emerald-300 px-2 py-0.5 text-[11px] font-medium border border-emerald-500/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-soft" />
+              Real-time
+            </span>
+          </div>
+          {!snap || snap.live_feed.length === 0 ? (
+            <div className="text-sm text-zinc-500 py-6 text-center">
+              No verification results yet. Submit a job from the Mass Processing Engine to see
+              live results here.
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {snap.live_feed.map((item, i) => (
+                <li
+                  key={`${item.email}-${i}`}
+                  className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.02] border border-white/5 px-3 py-2"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <StatusDot status={item.status} />
+                    <span className="font-mono text-xs text-zinc-200 truncate">{item.email}</span>
+                  </div>
+                  <span className="text-[11px] text-zinc-500 shrink-0">
+                    {relativeTime(item.ts)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="lg:col-span-2 rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <div className="text-base font-semibold text-white">Verification Volume (7 Days)</div>
+              <div className="text-xs text-zinc-500 mt-0.5">
+                Per-day processed counts derived from job timestamps. Peak today: {peakLabel}.
+              </div>
+            </div>
+            <BarChart3 className="w-4 h-4 text-zinc-500" />
+          </div>
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={volumeData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <XAxis
+                  dataKey="day"
+                  tick={{ fontSize: 11, fill: "#71717a" }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  cursor={{ fill: "rgba(99,102,241,0.08)" }}
+                  contentStyle={{
+                    background: "#0b0d18",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: 8,
+                    color: "#e6e7eb",
+                    fontSize: 12,
+                  }}
+                  labelStyle={{ color: "#a1a1aa" }}
+                  formatter={(v: number) => [v.toLocaleString(), "verified"]}
+                />
+                <Bar dataKey="count" fill="url(#volGradient)" radius={[6, 6, 0, 0]} />
+                <defs>
+                  <linearGradient id="volGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#a5b4fc" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#6366f1" stopOpacity={0.4} />
+                  </linearGradient>
+                </defs>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-base font-semibold text-white">Recent Jobs</div>
+          <button
+            onClick={onNewJob}
+            className="text-xs text-indigo-300 hover:text-indigo-200 inline-flex items-center gap-1"
+          >
+            View All <ArrowUpRight className="w-3 h-3" />
+          </button>
+        </div>
+        {!snap || snap.recent_jobs.length === 0 ? (
+          <div className="text-sm text-zinc-500 py-6 text-center">
+            No jobs yet. Click <span className="text-indigo-300">New Job</span> to start the
+            first one.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-[11px] uppercase tracking-wider text-zinc-500">
+                <tr className="text-left">
+                  <th className="px-3 py-2 font-medium">Job</th>
+                  <th className="px-3 py-2 font-medium">Rows</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">Outcome</th>
+                  <th className="px-3 py-2 font-medium text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {snap.recent_jobs.map((j) => {
+                  const pct =
+                    j.total > 0 ? Math.min(100, Math.round((j.processed / j.total) * 100)) : 0;
+                  const outcome =
+                    j.status === "done"
+                      ? `${j.summary.valid} valid · ${j.summary.invalid} invalid`
+                      : j.status === "running"
+                        ? `Processing (${pct}%)`
+                        : j.status === "queued"
+                          ? "Queued"
+                          : j.status === "error"
+                            ? "Errored"
+                            : "—";
+                  return (
+                    <tr key={j.job_id} className="hover:bg-white/[0.02]">
+                      <td className="px-3 py-2.5 font-mono text-zinc-200">{jobLabel(j.job_id)}</td>
+                      <td className="px-3 py-2.5 tabular-nums text-zinc-300">
+                        {j.total.toLocaleString()}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <JobStatusPill status={j.status} />
+                      </td>
+                      <td className="px-3 py-2.5 text-zinc-400 text-xs">{outcome}</td>
+                      <td className="px-3 py-2.5 text-right">
+                        {j.status === "done" ? (
+                          <a
+                            href={api.jobCsvUrl(j.job_id)}
+                            className="text-xs text-indigo-300 hover:text-indigo-200"
+                          >
+                            Export CSV
+                          </a>
+                        ) : (
+                          <span className="text-xs text-zinc-600">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatusDot({ status }: { status: Status }) {
+  const cls: Record<Status, string> = {
+    valid: "bg-emerald-400",
+    invalid: "bg-rose-400",
+    risky: "bg-amber-400",
+    unknown: "bg-zinc-400",
+  };
+  return <span className={`inline-block w-2 h-2 rounded-full ${cls[status]}`} />;
+}
+
+function JobStatusPill({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    done: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+    running: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30",
+    queued: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
+    error: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+  };
+  const label =
+    status === "done"
+      ? "Completed"
+      : status === "running"
+        ? "Processing"
+        : status === "queued"
+          ? "Queued"
+          : status === "error"
+            ? "Error"
+            : status;
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+        map[status] ?? map.queued
+      }`}
+    >
+      <span
+        className={`w-1.5 h-1.5 rounded-full ${
+          status === "running" ? "bg-indigo-400 pulse-soft" : "bg-current"
+        }`}
+      />
+      {label}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// v3: Lead Finder (BYOL — bring your own targets, no scraping)
+// ---------------------------------------------------------------------------
+
+const LEAD_FINDER_SAMPLE = `Jane Doe, ACME Inc, acme.com
+Sam Patel, GitHub, github.com
+Maria Silva, Mozilla, mozilla.org`;
+
+function LeadFinderView() {
+  const [text, setText] = useState(LEAD_FINDER_SAMPLE);
+  const [checkMx, setCheckMx] = useState(true);
+  const [checkSmtp, setCheckSmtp] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<LeadFinderResultRow[]>([]);
+  const [elapsed, setElapsed] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState<LeadFinderResultRow | null>(null);
+
+  const parseTargets = (raw: string): LeadFinderTarget[] => {
+    const out: LeadFinderTarget[] = [];
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const parts = trimmed.split(",").map((s) => s.trim());
+      if (parts.length === 1) continue; // need at least name + domain
+      const name = parts[0];
+      let company: string | undefined;
+      let domain: string;
+      if (parts.length >= 3) {
+        company = parts[1];
+        domain = parts[2];
+      } else {
+        domain = parts[1];
+      }
+      if (name && domain) out.push({ name, company, domain });
+    }
+    return out;
+  };
+
+  const run = async () => {
+    const targets = parseTargets(text);
+    if (targets.length === 0) {
+      setError("Add at least one line in the format: Name, Company (optional), domain.com");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.leadFinder(targets, {
+        check_mx: checkMx,
+        check_smtp: checkSmtp,
+      });
+      setResults(res.results);
+      setElapsed(res.elapsed_ms);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportCsv = () => {
+    if (results.length === 0) return;
+    const rows: string[] = [
+      "name,company,domain,best_email,best_pattern,best_status,confidence",
+    ];
+    for (const r of results) {
+      rows.push(
+        [
+          r.name,
+          r.company ?? "",
+          r.domain,
+          r.best_email ?? "",
+          r.best_pattern ?? "",
+          r.best_status ?? "",
+          r.best_confidence != null ? (r.best_confidence * 100).toFixed(0) + "%" : "",
+        ]
+          .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+          .join(","),
+      );
+    }
+    downloadText("lead-finder-results.csv", rows.join("\n"));
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Targeted Lead Finder"
+        subtitle="Bring-your-own-targets pattern lookup. Paste names + companies + domains you have a legitimate business reason to contact, and we'll generate the most likely work-email patterns and verify them. No Google dorks. No LinkedIn scraping. Pure pattern + DNS."
+      />
+
+      <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] p-4 text-sm text-amber-100/90 flex gap-3">
+        <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0 text-amber-300" />
+        <div>
+          <div className="font-medium text-amber-200">Bring-your-own-targets, by design.</div>
+          <div className="text-amber-100/70 mt-0.5">
+            We don&apos;t scrape LinkedIn / Google / Twitter / Maps. Use this only for people you
+            have a legitimate reason to email (existing partnerships, opt-in lists, prior contact,
+            G2 reviewers, etc.). Verifying ≠ permission to send.
+          </div>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur p-5">
+          <div className="text-sm text-zinc-300 mb-2 font-medium">Targets</div>
+          <div className="text-xs text-zinc-500 mb-3">
+            One per line: <span className="font-mono">Name, Company (optional), domain.com</span>
+          </div>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Jane Doe, ACME Inc, acme.com"
+            className="w-full h-44 rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-500 font-mono resize-none focus:border-indigo-400/40"
+          />
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <PrimaryButton onClick={run} disabled={loading} icon={Users}>
+              {loading ? "Resolving..." : "Find emails"}
+            </PrimaryButton>
+            <GhostButton onClick={() => setText(LEAD_FINDER_SAMPLE)}>Load sample</GhostButton>
+            <GhostButton
+              onClick={() => {
+                setText("");
+                setResults([]);
+                setElapsed(null);
+              }}
+              icon={Trash2}
+            >
+              Clear
+            </GhostButton>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Settings2 className="w-4 h-4 text-indigo-300" />
+            <div className="text-sm font-medium text-white">Pipeline</div>
+          </div>
+          <div className="space-y-3">
+            <Toggle
+              label="Verify domain MX"
+              hint="Confirms the company's mail servers exist. Recommended."
+              checked={checkMx}
+              onChange={setCheckMx}
+            />
+            <Toggle
+              label="Live SMTP probe"
+              hint="Slower but catches non-existent mailboxes. Outbound :25 may be blocked."
+              checked={checkSmtp}
+              onChange={setCheckSmtp}
+            />
+          </div>
+          <div className="mt-5 pt-4 border-t border-white/5 text-xs text-zinc-500 space-y-1.5">
+            <div>~15 patterns per target.</div>
+            <div>Top {checkSmtp ? "3" : "8"} candidates verified per target.</div>
+            <div>Ranked by status &gt; pattern prior.</div>
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          <AlertTriangle className="w-4 h-4" /> {error}
+        </div>
+      )}
+
+      {results.length > 0 && (
+        <div className="rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur p-5">
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+            <div>
+              <div className="text-base font-semibold text-white">Extracted Leads</div>
+              <div className="text-xs text-zinc-500">
+                Found <span className="text-emerald-300">{results.filter((r) => r.best_email).length}</span>{" "}
+                of {results.length} matching profiles
+                {elapsed !== null && ` · ${(elapsed / 1000).toFixed(2)}s`}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <GhostButton onClick={exportCsv} icon={Download}>
+                Export CSV
+              </GhostButton>
+            </div>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            {results.map((row, i) => (
+              <LeadCard key={`${row.domain}-${i}`} row={row} onOpen={() => setOpen(row)} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {open && <LeadDetailModal row={open} onClose={() => setOpen(null)} />}
+    </div>
+  );
+}
+
+function LeadCard({
+  row,
+  onOpen,
+}: {
+  row: LeadFinderResultRow;
+  onOpen: () => void;
+}) {
+  const initials = row.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0]?.toUpperCase() ?? "")
+    .join("");
+  const statusColor: Record<string, string> = {
+    valid: "text-emerald-300",
+    risky: "text-amber-300",
+    invalid: "text-rose-300",
+    unknown: "text-zinc-400",
+  };
+  return (
+    <div className="rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] p-4 transition-colors">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400/40 to-sky-400/40 grid place-items-center text-sm font-semibold text-white shrink-0">
+          {initials || "?"}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-sm font-medium text-white truncate">{row.name}</div>
+            <button
+              onClick={onOpen}
+              className="text-zinc-500 hover:text-white shrink-0"
+              title="Show all candidates"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="text-xs text-zinc-400 mt-0.5">
+            {row.company ? (
+              <>
+                at <span className="text-emerald-300">{row.company}</span>
+              </>
+            ) : (
+              <span className="text-zinc-500">domain {row.domain}</span>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3 text-[11px]">
+        <div>
+          <div className="text-zinc-500 uppercase tracking-wider">Email</div>
+          <div className={`font-mono text-xs mt-0.5 truncate ${row.best_email ? "text-zinc-100" : "text-zinc-600"}`}>
+            {row.best_email ?? "Not found"}
+          </div>
+        </div>
+        <div>
+          <div className="text-zinc-500 uppercase tracking-wider">Status</div>
+          <div
+            className={`mt-0.5 ${
+              row.best_status ? statusColor[row.best_status] : "text-zinc-600"
+            }`}
+          >
+            {row.best_status ?? "—"}
+            {row.best_confidence != null && (
+              <span className="text-zinc-500 ml-1.5">
+                · {(row.best_confidence * 100).toFixed(0)}%
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      {row.notes.length > 0 && (
+        <div className="mt-3 text-[11px] text-amber-300/80 leading-snug">
+          {row.notes.join(" · ")}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LeadDetailModal({
+  row,
+  onClose,
+}: {
+  row: LeadFinderResultRow;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+  const statusColor: Record<string, string> = {
+    valid: "text-emerald-300",
+    risky: "text-amber-300",
+    invalid: "text-rose-300",
+    unknown: "text-zinc-400",
+  };
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm grid place-items-center p-4"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#0c0e18] p-6 shadow-2xl max-h-[90vh] overflow-auto"
+      >
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <div className="text-lg font-semibold text-white">{row.name}</div>
+            <div className="text-xs text-zinc-500">
+              {row.company ? `${row.company} · ` : ""}
+              {row.domain}
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 text-zinc-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4 mb-4">
+          <div className="text-[11px] text-zinc-500 uppercase tracking-wider">Best match</div>
+          <div className="mt-1 flex items-baseline gap-3 flex-wrap">
+            <div className="font-mono text-base text-white">
+              {row.best_email ?? "Not found"}
+            </div>
+            {row.best_pattern && (
+              <div className="text-xs text-zinc-500">
+                pattern: <span className="text-zinc-300 font-mono">{row.best_pattern}</span>
+              </div>
+            )}
+            {row.best_status && (
+              <div className={`text-xs ${statusColor[row.best_status]}`}>
+                {row.best_status}
+                {row.best_confidence != null && (
+                  <span className="text-zinc-500">
+                    {" "}
+                    · {(row.best_confidence * 100).toFixed(0)}%
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-2">
+          All candidates ({row.candidates.length})
+        </div>
+        <div className="rounded-xl border border-white/5 bg-black/30 divide-y divide-white/5 overflow-hidden">
+          {row.candidates.map((c, i) => (
+            <LeadCandidateRow key={i} c={c} />
+          ))}
+          {row.candidates.length === 0 && (
+            <div className="p-4 text-sm text-zinc-500 text-center">No candidates generated.</div>
+          )}
+        </div>
+
+        {row.notes.length > 0 && (
+          <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-200">
+            {row.notes.map((n, i) => (
+              <div key={i}>{n}</div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LeadCandidateRow({ c }: { c: LeadFinderCandidate }) {
+  const statusCls: Record<Status, string> = {
+    valid: "text-emerald-300",
+    risky: "text-amber-300",
+    invalid: "text-rose-300",
+    unknown: "text-zinc-400",
+  };
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 hover:bg-white/[0.02]">
+      <div className="text-[11px] text-zinc-500 font-mono w-24 shrink-0">{c.pattern}</div>
+      <div className="flex-1 min-w-0 font-mono text-xs text-zinc-200 truncate">{c.email}</div>
+      <div className={`text-[11px] shrink-0 ${statusCls[c.status]}`}>{c.status}</div>
+      <div className="text-[11px] text-zinc-500 w-12 text-right tabular-nums shrink-0">
+        {(c.confidence * 100).toFixed(0)}%
+      </div>
+      <button
+        onClick={() => navigator.clipboard.writeText(c.email)}
+        className="p-1 rounded hover:bg-white/5 text-zinc-500 hover:text-white"
+        title="copy"
+      >
+        <Copy className="w-3 h-3" />
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// v3: Tools Marketplace
+// ---------------------------------------------------------------------------
+
+interface ToolCard {
+  key: string;
+  title: string;
+  body: string;
+  icon: typeof Sparkles;
+  go: Tab;
+  badge?: string;
+}
+
+function ToolsMarketplaceView({ onGo }: { onGo: (t: Tab) => void }) {
+  const cards: ToolCard[] = [
+    {
+      key: "extractor",
+      title: "Email Extractor",
+      body: "Pull every email out of pasted text, raw HTML, .eml, .mbox, .csv, .xlsx, .json. De-obfuscates 'name [at] example [dot] com' patterns.",
+      icon: Sparkles,
+      go: "extract",
+    },
+    {
+      key: "single",
+      title: "Single Verifier",
+      body: "Inspect one address: syntax, MX, role/disposable flags, free-vs-work, country, optional live SMTP probe. Best for spot-checking.",
+      icon: Filter,
+      go: "verify-one",
+    },
+    {
+      key: "bulk",
+      title: "Mass Processing",
+      body: "Drop a CSV / XLSX / TXT and verify up to 100,000 addresses per job with concurrency control, advanced filters, and multi-format export.",
+      icon: Database,
+      go: "verify-bulk",
+      badge: "POPULAR",
+    },
+    {
+      key: "lead",
+      title: "Lead Finder",
+      body: "Bring-your-own-targets pattern discovery: paste (name, company, domain) and we generate + verify the most likely work email. No scraping.",
+      icon: Users,
+      go: "lead-finder",
+    },
+    {
+      key: "api",
+      title: "REST API",
+      body: "Same engine, callable from your own code. /api/extract, /api/verify, /api/jobs, /api/lead-finder. Swagger docs at /docs.",
+      icon: Code2,
+      go: "api",
+    },
+    {
+      key: "dashboard",
+      title: "Command Center",
+      body: "Real-time dashboard: total verified, success rate, active jobs, 7-day volume chart, recent jobs, live feed of latest results.",
+      icon: LayoutDashboard,
+      go: "command-center",
+    },
+  ];
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Tools Marketplace"
+        subtitle="Every tool in this app, lined up for quick navigation. Each card opens the same workflow you'd find in the sidebar — this is just a faster on-ramp when you know what you need."
+      />
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {cards.map((c) => {
+          const Icon = c.icon;
+          return (
+            <button
+              key={c.key}
+              onClick={() => onGo(c.go)}
+              className="group text-left rounded-2xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] backdrop-blur p-5 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 ring-1 ring-indigo-500/30 grid place-items-center">
+                  <Icon className="w-4 h-4 text-indigo-300" />
+                </div>
+                {c.badge && (
+                  <span className="text-[10px] rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 uppercase tracking-wider font-medium">
+                    {c.badge}
+                  </span>
+                )}
+              </div>
+              <div className="mt-3 text-base font-semibold text-white">{c.title}</div>
+              <div className="mt-1.5 text-sm text-zinc-400 leading-relaxed">{c.body}</div>
+              <div className="mt-4 inline-flex items-center gap-1 text-xs text-indigo-300 group-hover:text-indigo-200">
+                Open <ArrowUpRight className="w-3 h-3" />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// v3: App shell (sidebar + topbar + content + footer)
+// ---------------------------------------------------------------------------
+
 export default function App() {
-  const [tab, setTab] = useState<Tab>("extract");
+  const [tab, setTab] = useState<Tab>("command-center");
   const [bulkSeed, setBulkSeed] = useState<string[]>([]);
   const [meta, setMeta] = useState<ServerMeta | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     api.meta().then(setMeta).catch(() => undefined);
   }, []);
 
-  const tabs: Array<{ key: Tab; label: string; icon: typeof Sparkles }> = [
-    { key: "extract", label: "Extract", icon: Sparkles },
-    { key: "verify-bulk", label: "Verify bulk", icon: ShieldCheck },
-    { key: "verify-one", label: "Verify single", icon: Filter },
-    { key: "api", label: "API", icon: ServerCog },
-    { key: "about", label: "About", icon: Heart },
-  ];
+  const titles: Record<Tab, { title: string; subtitle: string }> = {
+    "command-center": { title: "Command Center", subtitle: "" },
+    "verify-bulk": {
+      title: "Mass Processing Engine",
+      subtitle:
+        "Upload large lists for high-throughput validation and cleaning. CSV / XLSX / TXT / JSON / .mbox / .eml — the whole catalog from /api/meta is accepted.",
+    },
+    "lead-finder": { title: "Targeted Lead Finder", subtitle: "" },
+    extract: {
+      title: "Email Extractor",
+      subtitle:
+        "Paste any text or drop a file. We'll pull out every email, de-obfuscate '[at]' / '[dot]' patterns, and dedupe.",
+    },
+    "verify-one": {
+      title: "Single Email Inspector",
+      subtitle:
+        "Drill into one address: syntax, MX records, country, role, disposable, and (optionally) live SMTP.",
+    },
+    tools: { title: "Tools Marketplace", subtitle: "" },
+    api: {
+      title: "REST API Reference",
+      subtitle:
+        "Call the same engine from your code. Swagger UI is available at /docs; quick examples below.",
+    },
+    about: { title: "About", subtitle: "" },
+  };
 
   return (
-    <div className="relative min-h-screen">
+    <div className="relative min-h-screen text-zinc-100">
       <div className="absolute inset-0 bg-grid pointer-events-none" />
       <div className="absolute inset-0 bg-glow pointer-events-none" />
-      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-8">
-        <header className="flex items-center justify-between mb-8 flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 grid place-items-center shadow-lg shadow-indigo-500/30">
-              <ShieldCheck className="w-5 h-5 text-white" />
-            </div>
+
+      <div className="relative flex">
+        <Sidebar
+          active={tab}
+          onSelect={setTab}
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+        />
+
+        <div className="flex-1 min-w-0 flex flex-col min-h-screen">
+          <Topbar
+            onMenu={() => setSidebarOpen(true)}
+            onJump={() => setTab("verify-bulk")}
+            onNew={() => setTab("verify-bulk")}
+          />
+
+          <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-[1400px] w-full mx-auto">
+            {tab === "command-center" && (
+              <CommandCenterView meta={meta} onNewJob={() => setTab("verify-bulk")} />
+            )}
+            {tab === "verify-bulk" && (
+              <div className="space-y-6">
+                <PageHeader
+                  title={titles[tab].title}
+                  subtitle={titles[tab].subtitle}
+                  cta={
+                    <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-soft" />
+                      Engine ready
+                    </span>
+                  }
+                />
+                <VerifyBulkTab initialEmails={bulkSeed} meta={meta} />
+              </div>
+            )}
+            {tab === "lead-finder" && <LeadFinderView />}
+            {tab === "extract" && (
+              <div className="space-y-6">
+                <PageHeader title={titles[tab].title} subtitle={titles[tab].subtitle} />
+                <ExtractTab
+                  meta={meta}
+                  onResults={(emails) => {
+                    setBulkSeed(emails);
+                    setTab("verify-bulk");
+                  }}
+                />
+              </div>
+            )}
+            {tab === "verify-one" && (
+              <div className="space-y-6">
+                <PageHeader title={titles[tab].title} subtitle={titles[tab].subtitle} />
+                <VerifyOneTab />
+              </div>
+            )}
+            {tab === "tools" && <ToolsMarketplaceView onGo={setTab} />}
+            {tab === "api" && (
+              <div className="space-y-6">
+                <PageHeader title={titles[tab].title} subtitle={titles[tab].subtitle} />
+                <ApiTab />
+              </div>
+            )}
+            {tab === "about" && (
+              <div className="space-y-6">
+                <PageHeader title={titles[tab].title} subtitle={titles[tab].subtitle} />
+                <AboutTab meta={meta} />
+              </div>
+            )}
+          </main>
+
+          <footer className="border-t border-white/5 px-6 py-4 text-xs text-zinc-500 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-lg font-semibold text-white tracking-tight">
-                Delowar&apos;s Email Verifier
-              </div>
-              <div className="text-xs text-zinc-500">
-                Extract &middot; validate &middot; de-risk - at scale, for free.
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 text-sm">
-            <a
-              href={PORTFOLIO_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-zinc-400 hover:text-white"
-            >
-              <Globe className="w-4 h-4" />
-              <span className="hidden sm:inline">delowarhossain.dev</span>
-            </a>
-            <a
-              href={GITHUB_PROFILE}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-zinc-400 hover:text-white"
-            >
-              <Github className="w-4 h-4" />
-              <span className="hidden sm:inline">@mdhossain-2437</span>
-            </a>
-          </div>
-        </header>
-
-        <section className="mb-8 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900/40 px-3 py-1 text-xs text-zinc-300">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-300" />
-            Open-source &middot; free &middot; runs entirely on your infra
-          </div>
-          <h1 className="mt-4 text-3xl sm:text-4xl font-semibold text-white tracking-tight">
-            Find every email. Then prove it&apos;s real.
-          </h1>
-          <p className="mt-3 max-w-2xl mx-auto text-zinc-400">
-            Paste text, drop a CSV/XLSX/EML/JSON file, or pipe lists from your CRM. We extract the
-            addresses, classify them by country and provider, validate the syntax, check MX, and -
-            optionally - open a live SMTP connection to confirm the mailbox accepts mail.
-          </p>
-          <div className="mt-5 flex items-center justify-center gap-2 flex-wrap">
-            <PrimaryButton onClick={() => setTab("extract")} icon={Sparkles}>
-              Try the extractor
-            </PrimaryButton>
-            <GhostButton onClick={() => setTab("verify-bulk")} icon={ShieldCheck}>
-              Bulk verify
-            </GhostButton>
-          </div>
-        </section>
-
-        <div className="mb-4 flex flex-wrap gap-1 rounded-xl border border-zinc-800 bg-zinc-900/40 p-1">
-          {tabs.map((t) => {
-            const Icon = t.icon;
-            return (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  tab === t.key
-                    ? "bg-indigo-500/20 text-white"
-                    : "text-zinc-400 hover:text-white"
-                }`}
+              Created by{" "}
+              <a
+                href={PORTFOLIO_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="text-zinc-300 hover:text-white"
               >
-                <Icon className="w-4 h-4" />
-                {t.label}
-              </button>
-            );
-          })}
+                Delowar Hossain
+              </a>
+            </div>
+            <div className="flex items-center gap-4">
+              <a
+                href={PORTFOLIO_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-white"
+              >
+                Portfolio
+              </a>
+              <a
+                href={GITHUB_REPO}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-white"
+              >
+                GitHub
+              </a>
+              <a href="/docs" target="_blank" rel="noreferrer" className="hover:text-white">
+                Documentation
+              </a>
+            </div>
+          </footer>
         </div>
-
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 backdrop-blur p-4 sm:p-6">
-          {tab === "extract" && (
-            <ExtractTab
-              meta={meta}
-              onResults={(emails) => {
-                setBulkSeed(emails);
-                setTab("verify-bulk");
-              }}
-            />
-          )}
-          {tab === "verify-bulk" && <VerifyBulkTab initialEmails={bulkSeed} meta={meta} />}
-          {tab === "verify-one" && <VerifyOneTab />}
-          {tab === "api" && <ApiTab />}
-          {tab === "about" && <AboutTab meta={meta} />}
-        </div>
-
-        <section className="mt-10 grid sm:grid-cols-3 gap-4">
-          <FeatureCard
-            icon={FileText}
-            title="Multi-format ingest"
-            body="Drop CSV, XLSX, JSON, HTML, EML, or .mbox. We extract addresses (even obfuscated ones) and pre-clean them - dedupe, drop disposable, drop role accounts."
-          />
-          <FeatureCard
-            icon={ShieldCheck}
-            title="Layered verification"
-            body="Syntax -> MX records -> live SMTP probe. Country/TLD signal and free-vs-work classification baked into every result row."
-          />
-          <FeatureCard
-            icon={Zap}
-            title="Bulk + filterable"
-            body="Up to 100,000 emails per job with progress streaming, advanced filters (status / role / disposable / MX / country), and CSV/XLSX/TXT/JSON exports."
-          />
-        </section>
-
-        <footer className="mt-12 mb-4 text-center text-xs text-zinc-500 space-y-1">
-          <div>
-            Built with <Heart className="inline w-3 h-3 text-rose-400" /> by{" "}
-            <a
-              href={PORTFOLIO_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="text-indigo-300 hover:underline"
-            >
-              Delowar Hossain
-            </a>{" "}
-            &middot;{" "}
-            <a
-              href={GITHUB_PROFILE}
-              target="_blank"
-              rel="noreferrer"
-              className="text-indigo-300 hover:underline"
-            >
-              github.com/mdhossain-2437
-            </a>
-          </div>
-          <div>
-            Use responsibly. SMTP probing may be blocked by major providers and can affect your
-            server&apos;s reputation if abused.
-          </div>
-        </footer>
       </div>
     </div>
   );
