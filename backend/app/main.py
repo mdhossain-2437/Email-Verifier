@@ -31,11 +31,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from . import api_keys, auth, profiles
+from .auth import get_current_user, resolve_authorization
 from .disposable import is_disposable, is_role
 from .extractor import extract_emails, extract_unique
 from .files import extract_from_file, supported_extensions
@@ -82,6 +84,42 @@ def _parse_max_upload_bytes() -> int:
 
 
 MAX_UPLOAD_BYTES = _parse_max_upload_bytes()  # 0 = no cap (default)
+
+
+# ---------------------------------------------------------------------------
+# Auth gate middleware
+# ---------------------------------------------------------------------------
+#
+# Every /api/* path is locked behind a Firebase ID-token or personal API key
+# EXCEPT for the small whitelist below: liveness probes and surface-area
+# metadata that the login screen needs to render before the user has signed
+# in. The middleware sets ``request.state.user`` so handlers that need the
+# caller's identity can pull it via ``get_current_user(request)`` without
+# repeating the token parsing dance.
+#
+# CORS code MUST stay above this middleware (registered after = runs first
+# in starlette).
+
+PUBLIC_API_PATHS = {"/api/version", "/api/meta"}
+
+
+@app.middleware("http")
+async def _auth_gate(request: Request, call_next):
+    path = request.url.path
+    if not path.startswith("/api/"):
+        return await call_next(request)
+    if path in PUBLIC_API_PATHS:
+        return await call_next(request)
+    auth_hdr = request.headers.get("authorization")
+    try:
+        user = await resolve_authorization(auth_hdr)
+    except HTTPException as exc:
+        headers = dict(exc.headers or {})
+        return JSONResponse(
+            {"detail": exc.detail}, status_code=exc.status_code, headers=headers
+        )
+    request.state.user = user
+    return await call_next(request)
 
 
 def _parse_status_filter(value: Optional[str]) -> Optional[set[str]]:
@@ -289,7 +327,12 @@ async def healthz():
 @app.get("/api/version")
 async def version_endpoint():
     """Surface server-side version + build metadata so the UI can pin
-    feature behavior to a known backend without parsing /openapi.json."""
+    feature behavior to a known backend without parsing /openapi.json.
+
+    Also surfaces ``firebase_ready`` so ops can tell at a glance whether
+    the backend has loaded its service-account credentials. We expose this
+    on the public version endpoint (not on a protected route) precisely so
+    a 401-ed client can still tell *why* it's getting locked out."""
     return {
         "name": "email-verifier",
         "version": app.version,
@@ -298,6 +341,8 @@ async def version_endpoint():
         "max_upload_bytes": MAX_UPLOAD_BYTES,
         "max_job_inputs": MAX_JOB_INPUTS,
         "max_bulk_sync": MAX_BULK_SYNC,
+        "firebase_ready": auth.firebase_ready(),
+        "firebase_init_error": auth.firebase_init_error(),
     }
 
 
@@ -402,6 +447,70 @@ async def dashboard_endpoint():
         "api_health": "operational",
         "elapsed_ms": (time.perf_counter() - started) * 1000,
     }
+
+
+# ---------------------------------------------------------------------------
+# v5: Identity + API-key endpoints
+# ---------------------------------------------------------------------------
+
+
+class CreateApiKeyRequest(BaseModel):
+    name: str = Field(default="", max_length=80, description="Human label for the key.")
+
+
+@app.get("/api/whoami")
+async def whoami_endpoint(request: Request):
+    """Return the caller's profile. Useful for the frontend to confirm the
+    backend agrees with what Firebase Auth said in the browser."""
+    user = get_current_user(request)
+    profile = profiles.get_profile(user.uid) or profiles.upsert_profile(user)
+    return profile.public_dict()
+
+
+@app.get("/api/keys")
+async def list_keys_endpoint(request: Request):
+    """List the caller's personal API keys. Hashes never leave the server;
+    only the human-readable prefix + metadata is surfaced."""
+    user = get_current_user(request)
+    keys = api_keys.list_keys(user.uid)
+    return {"keys": [k.public_dict() for k in keys]}
+
+
+@app.post("/api/keys")
+async def create_key_endpoint(req: CreateApiKeyRequest, request: Request):
+    """Generate a new API key. Returns the raw token EXACTLY ONCE — after
+    this response the value is gone forever (we store only the SHA-256
+    hash). Only browser sessions (Firebase ID tokens) may create keys, so
+    a leaked key cannot self-replicate."""
+    user = get_current_user(request)
+    if user.auth_method != "id_token":
+        raise HTTPException(
+            status_code=403,
+            detail="API keys can only be created from a browser session, "
+            "not via another API key.",
+        )
+    raw, record = api_keys.create_key(
+        user.uid,
+        req.name,
+        owner_email=user.email,
+        owner_name=user.display_name,
+    )
+    return {"key": raw, "record": record.public_dict()}
+
+
+@app.delete("/api/keys/{key_id}")
+async def revoke_key_endpoint(key_id: str, request: Request):
+    """Mark a key as revoked. The key remains in the audit log but stops
+    authenticating. Only browser sessions can revoke."""
+    user = get_current_user(request)
+    if user.auth_method != "id_token":
+        raise HTTPException(
+            status_code=403,
+            detail="API keys can only be revoked from a browser session.",
+        )
+    if not api_keys.revoke_key(user.uid, key_id):
+        raise HTTPException(status_code=404, detail="key not found")
+    return {"ok": True}
 
 
 @app.post("/api/extract", response_model=ExtractResponse)

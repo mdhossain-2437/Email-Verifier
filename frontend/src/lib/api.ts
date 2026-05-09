@@ -169,12 +169,59 @@ export interface LeadFinderResponse {
   results: LeadFinderResultRow[];
 }
 
+export interface ApiKey {
+  id: string;
+  prefix: string;
+  name: string;
+  created_at: number;
+  last_used_at: number | null;
+  revoked: boolean;
+}
+
+export interface ApiKeyCreateResponse {
+  key: string;
+  record: ApiKey;
+}
+
+export interface UserProfile {
+  uid: string;
+  email: string | null;
+  display_name: string | null;
+  photo_url: string | null;
+  provider: string | null;
+  created_at: number;
+  last_seen_at: number;
+  plan: string;
+}
+
 const RAW_BASE = import.meta.env.VITE_API_URL as string | undefined;
 export const API_BASE = (RAW_BASE && RAW_BASE.trim()) || window.location.origin;
 
+/**
+ * Optional token getter injected by the auth layer. When set, every
+ * request() call will include `Authorization: Bearer <token>` so the
+ * backend can identify the user. Falls back to no header when null
+ * (unauthenticated/pre-login requests like /api/meta still work).
+ */
+let _getToken: (() => Promise<string | null>) | null = null;
+
+export function setTokenGetter(fn: (() => Promise<string | null>) | null) {
+  _getToken = fn;
+}
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const hdrs: Record<string, string> = { "Content-Type": "application/json" };
+  if (_getToken) {
+    const tok = await _getToken();
+    if (tok) hdrs["Authorization"] = `Bearer ${tok}`;
+  }
+  return hdrs;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const hdrs = await authHeaders();
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: hdrs,
     ...init,
   });
   if (!res.ok) {
@@ -213,8 +260,14 @@ export const api = {
   extractFile: async (file: File): Promise<ExtractResponse> => {
     const fd = new FormData();
     fd.append("file", file);
+    const tokenHdrs: Record<string, string> = {};
+    if (_getToken) {
+      const tok = await _getToken();
+      if (tok) tokenHdrs["Authorization"] = `Bearer ${tok}`;
+    }
     const res = await fetch(`${API_BASE}/api/extract-file`, {
       method: "POST",
+      headers: tokenHdrs,
       body: fd,
     });
     if (!res.ok) await unwrapError(res, `upload failed (${res.status})`);
@@ -283,7 +336,12 @@ export const api = {
     fd.append("drop_invalid_syntax", String(opts.drop_invalid_syntax ?? false));
     fd.append("drop_disposable", String(opts.drop_disposable ?? false));
     fd.append("drop_role", String(opts.drop_role ?? false));
-    const res = await fetch(`${API_BASE}/api/jobs/upload`, { method: "POST", body: fd });
+    const uploadHdrs: Record<string, string> = {};
+    if (_getToken) {
+      const tok = await _getToken();
+      if (tok) uploadHdrs["Authorization"] = `Bearer ${tok}`;
+    }
+    const res = await fetch(`${API_BASE}/api/jobs/upload`, { method: "POST", headers: uploadHdrs, body: fd });
     if (!res.ok) await unwrapError(res, `upload failed (${res.status})`);
     return res.json();
   },
@@ -315,4 +373,17 @@ export const api = {
         check_smtp: opts.check_smtp ?? false,
       }),
     }),
+
+  whoami: () => request<UserProfile>("/api/whoami"),
+
+  keys: {
+    list: () => request<{ keys: ApiKey[] }>("/api/keys"),
+    create: (name: string) =>
+      request<ApiKeyCreateResponse>("/api/keys", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      }),
+    revoke: (id: string) =>
+      request<{ ok: true }>(`/api/keys/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  },
 };
