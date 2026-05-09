@@ -55,13 +55,57 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Disable CORS. Do not remove this for full-stack development.
+# ---------------------------------------------------------------------------
+# CORS
+# ---------------------------------------------------------------------------
+#
+# Production deploys (Caddy / Vercel rewrites) serve the frontend on the same
+# origin as the backend, so CORS is a no-op there. The configurable allowlist
+# exists for two cases:
+#   1. Local dev where Vite runs on :5173 and calls uvicorn on :8000.
+#   2. A frontend hosted on a different domain than the API (e.g. a primary
+#      VPS API consumed by a Vercel-hosted SPA).
+#
+# Defaults are *deliberately* restrictive: localhost dev origins only. Operators
+# add real production origins via EMAIL_VERIFIER_ALLOWED_ORIGINS (comma list)
+# or pass "*" explicitly if they truly want to expose the API to any origin.
+# A literal "*" silently disables credentialed CORS (browser spec; combining
+# allow_origins=* with allow_credentials=True is undefined behaviour) so we
+# only enable credentials when a concrete origin list is configured.
+
+_DEFAULT_DEV_ORIGINS = (
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+)
+
+
+def _parse_allowed_origins() -> tuple[list[str], bool]:
+    """Returns (origins, allow_credentials).
+
+    Reads ``EMAIL_VERIFIER_ALLOWED_ORIGINS`` as a comma-separated list. If the
+    env var is unset we fall back to the localhost dev origins above so
+    ``npm run dev`` works out of the box. A literal ``*`` opts in to wide-open
+    CORS but disables credentials (per the spec).
+    """
+    raw = os.environ.get("EMAIL_VERIFIER_ALLOWED_ORIGINS", "").strip()
+    if not raw:
+        return list(_DEFAULT_DEV_ORIGINS), True
+    items = [o.strip() for o in raw.split(",") if o.strip()]
+    if "*" in items:
+        return ["*"], False
+    return items, True
+
+
+ALLOWED_ORIGINS, _CORS_ALLOW_CREDENTIALS = _parse_allowed_origins()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=_CORS_ALLOW_CREDENTIALS,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -134,14 +178,23 @@ MAX_UPLOAD_BYTES = _parse_max_upload_bytes()  # 0 = no cap (default)
 # caller's identity can pull it via ``get_current_user(request)`` without
 # repeating the token parsing dance.
 #
-# CORS code MUST stay above this middleware (registered after = runs first
-# in starlette).
+# Order note: ``app.add_middleware`` wraps the previous app, so the LAST
+# registered middleware is the OUTERMOST. ``CORSMiddleware`` is registered
+# above this gate, which means this gate runs first on requests. We therefore
+# short-circuit ``OPTIONS`` preflights here so CORSMiddleware (registered
+# below us in the chain) can answer them with the right ACAO/credentials
+# headers — otherwise browsers would see a 401 with no CORS headers and
+# block the real request.
 
 PUBLIC_API_PATHS = {"/api/version", "/api/meta"}
 
 
 @app.middleware("http")
 async def _auth_gate(request: Request, call_next):
+    # CORS preflights never carry the Authorization header. Hand them straight
+    # through to CORSMiddleware (which is below us in the chain).
+    if request.method == "OPTIONS":
+        return await call_next(request)
     path = request.url.path
     if not path.startswith("/api/"):
         return await call_next(request)
@@ -323,6 +376,15 @@ class LeadFinderResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Job registry (in-memory)
 # ---------------------------------------------------------------------------
+#
+# IMPORTANT: this registry is process-local. It is **not** shared across
+# uvicorn workers and is wiped on every restart. The deploy unit
+# (``deploy/azure/email-verifier.service``) pins ``--workers 1`` for that
+# reason. If you ever bump worker count, status polling and result downloads
+# will silently 404 against any worker that didn't receive the original
+# submit. The planned migration is to persist jobs in Firestore under
+# ``users/{uid}/jobs/{job_id}`` (same per-uid model already used by API keys
+# and profiles); see the project audit / refactor plan.
 
 
 @dataclass
@@ -342,6 +404,35 @@ class Job:
 
 
 _JOBS: dict[str, Job] = {}
+
+
+def _warn_if_multi_worker() -> None:
+    """Emit a loud warning if the deploy is misconfigured to run with more
+    than one uvicorn worker. The in-memory ``_JOBS`` registry is unsafe in
+    that mode (jobs submitted to worker A are invisible to worker B), so the
+    operator needs to know immediately rather than after their first 50%
+    job-status 404 in production.
+    """
+    raw = os.environ.get("WEB_CONCURRENCY", "").strip()
+    if not raw:
+        return
+    try:
+        workers = int(raw)
+    except ValueError:
+        return
+    if workers > 1:
+        import sys
+
+        msg = (
+            "WARNING: WEB_CONCURRENCY={n} but the async-job registry is "
+            "process-local. Jobs submitted to one worker will silently 404 "
+            "when polled via another. Pin --workers 1 until job persistence "
+            "is migrated to Firestore."
+        ).format(n=workers)
+        print(msg, file=sys.stderr, flush=True)
+
+
+_warn_if_multi_worker()
 
 
 def _summarize(results: list[VerificationResult]) -> dict[str, int]:

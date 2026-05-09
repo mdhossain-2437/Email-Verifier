@@ -17,11 +17,14 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 import smtplib
 import socket
+import time
+from collections import OrderedDict
 from dataclasses import dataclass, asdict, field
 from email.utils import parseaddr
-from typing import Optional
+from typing import Generic, Hashable, Optional, TypeVar
 
 import dns.asyncresolver
 import dns.exception
@@ -38,11 +41,94 @@ _RESOLVER = dns.asyncresolver.Resolver()
 _RESOLVER.lifetime = 5.0
 _RESOLVER.timeout = 3.0
 
+
+# ---------------------------------------------------------------------------
+# Bounded TTL cache
+# ---------------------------------------------------------------------------
+#
+# A long-running verifier sees thousands of unique domains over time. The
+# original implementation used unbounded ``dict``s which (a) leaked memory
+# slowly and (b) never refreshed stale DNS / SMTP results. This tiny
+# in-process cache caps both axes: a max-size LRU plus a per-entry TTL,
+# good enough that we don't need to pull cachetools in for one use.
+
+_K = TypeVar("_K", bound=Hashable)
+_V = TypeVar("_V")
+
+
+class _TTLCache(Generic[_K, _V]):
+    def __init__(self, *, maxsize: int, ttl: float) -> None:
+        self._maxsize = max(1, int(maxsize))
+        self._ttl = max(0.0, float(ttl))
+        # Single-threaded access via the asyncio event loop — no explicit
+        # lock needed. The OrderedDict gives us O(1) LRU touches on read.
+        self._data: "OrderedDict[_K, tuple[float, _V]]" = OrderedDict()
+
+    def get(self, key: _K) -> Optional[_V]:
+        entry = self._data.get(key)
+        if entry is None:
+            return None
+        expires_at, value = entry
+        if self._ttl and expires_at < time.monotonic():
+            # Expired — drop and miss.
+            self._data.pop(key, None)
+            return None
+        # LRU touch.
+        self._data.move_to_end(key)
+        return value
+
+    def set(self, key: _K, value: _V) -> None:
+        expires_at = time.monotonic() + self._ttl if self._ttl else float("inf")
+        if key in self._data:
+            self._data.move_to_end(key)
+        self._data[key] = (expires_at, value)
+        while len(self._data) > self._maxsize:
+            self._data.popitem(last=False)
+
+    def clear(self) -> None:
+        self._data.clear()
+
+    def __len__(self) -> int:  # pragma: no cover - trivial
+        return len(self._data)
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+# Tunables. Defaults sized for a single-VPS install resolving up to a few
+# thousand unique domains per session. Operators can override via env.
+_MX_CACHE_TTL = _env_int("EMAIL_VERIFIER_MX_CACHE_TTL", 600)        # 10 min
+_DOMAIN_CACHE_TTL = _env_int("EMAIL_VERIFIER_DOMAIN_CACHE_TTL", 600)
+_SMTP_CACHE_TTL = _env_int("EMAIL_VERIFIER_SMTP_CACHE_TTL", 300)    # 5 min
+_CACHE_MAXSIZE = _env_int("EMAIL_VERIFIER_CACHE_MAXSIZE", 10_000)
+
 # Per-process caches. These keep bulk verification fast — we only resolve MX
 # records once per domain even if 50,000 addresses share a domain.
-_MX_CACHE: dict[str, list[tuple[int, str]]] = {}
-_DOMAIN_OK_CACHE: dict[str, bool] = {}
-_SMTP_PROBE_CACHE: dict[tuple[str, str], "SmtpProbeResult"] = {}
+_MX_CACHE: _TTLCache[str, list[tuple[int, str]]] = _TTLCache(
+    maxsize=_CACHE_MAXSIZE, ttl=float(_MX_CACHE_TTL)
+)
+_DOMAIN_OK_CACHE: _TTLCache[str, bool] = _TTLCache(
+    maxsize=_CACHE_MAXSIZE, ttl=float(_DOMAIN_CACHE_TTL)
+)
+_SMTP_PROBE_CACHE: _TTLCache[tuple[str, str], "SmtpProbeResult"] = _TTLCache(
+    maxsize=_CACHE_MAXSIZE, ttl=float(_SMTP_CACHE_TTL)
+)
+
+
+def _reset_caches_for_tests() -> None:
+    """Test-only helper. Wipes all verifier caches so test ordering can't
+    leak DNS results from a prior test into a later one."""
+    _MX_CACHE.clear()
+    _DOMAIN_OK_CACHE.clear()
+    _SMTP_PROBE_CACHE.clear()
 
 
 @dataclass
@@ -133,8 +219,9 @@ def _check_syntax(email: str) -> tuple[bool, Optional[str], Optional[str]]:
 async def _resolve_mx(domain: str) -> list[tuple[int, str]]:
     """Resolve MX records for ``domain``. Falls back to A/AAAA per RFC 5321
     when no MX records are published. Result is cached per domain."""
-    if domain in _MX_CACHE:
-        return _MX_CACHE[domain]
+    cached = _MX_CACHE.get(domain)
+    if cached is not None:
+        return cached
 
     records: list[tuple[int, str]] = []
     try:
@@ -159,16 +246,17 @@ async def _resolve_mx(domain: str) -> list[tuple[int, str]]:
                 continue
 
     records.sort(key=lambda r: r[0])
-    _MX_CACHE[domain] = records
+    _MX_CACHE.set(domain, records)
     return records
 
 
 async def _domain_resolves(domain: str) -> bool:
-    if domain in _DOMAIN_OK_CACHE:
-        return _DOMAIN_OK_CACHE[domain]
+    cached = _DOMAIN_OK_CACHE.get(domain)
+    if cached is not None:
+        return cached
     records = await _resolve_mx(domain)
     ok = bool(records)
-    _DOMAIN_OK_CACHE[domain] = ok
+    _DOMAIN_OK_CACHE.set(domain, ok)
     return ok
 
 
@@ -228,15 +316,16 @@ async def _smtp_probe(
     timeout: float,
 ) -> SmtpProbeResult:
     cache_key = (domain, email)
-    if cache_key in _SMTP_PROBE_CACHE:
-        return _SMTP_PROBE_CACHE[cache_key]
+    cached = _SMTP_PROBE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
 
     mx_records = await _resolve_mx(domain)
     if not mx_records:
         result = SmtpProbeResult(
             deliverable=False, code=None, message="no MX records"
         )
-        _SMTP_PROBE_CACHE[cache_key] = result
+        _SMTP_PROBE_CACHE.set(cache_key, result)
         return result
 
     loop = asyncio.get_running_loop()
@@ -253,7 +342,7 @@ async def _smtp_probe(
         )
         if last_result.deliverable is not None:
             break
-    _SMTP_PROBE_CACHE[cache_key] = last_result
+    _SMTP_PROBE_CACHE.set(cache_key, last_result)
     return last_result
 
 
