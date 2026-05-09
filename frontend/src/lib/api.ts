@@ -101,6 +101,74 @@ export interface PreCleanOptions {
   drop_role?: boolean;
 }
 
+export interface DashboardJob {
+  job_id: string;
+  status: "queued" | "running" | "done" | "error";
+  total: number;
+  processed: number;
+  summary: Record<Status, number>;
+  started_at: number | null;
+  finished_at: number | null;
+}
+
+export interface DashboardLiveItem {
+  email: string;
+  status: Status;
+  domain: string | null;
+  job_id: string;
+  ts: number | null;
+}
+
+export interface DashboardSnapshot {
+  total_verified: number;
+  total_valid: number;
+  total_invalid: number;
+  total_risky: number;
+  total_unknown: number;
+  success_rate: number;
+  active_jobs: number;
+  rows_in_flight: number;
+  total_jobs: number;
+  volume_7d: number[];
+  live_feed: DashboardLiveItem[];
+  recent_jobs: DashboardJob[];
+  api_health: string;
+  elapsed_ms: number;
+}
+
+export interface LeadFinderTarget {
+  name: string;
+  company?: string | null;
+  domain: string;
+}
+
+export interface LeadFinderCandidate {
+  pattern: string;
+  email: string;
+  confidence: number;
+  status: Status;
+  reason: string | null;
+  has_mx: boolean | null;
+}
+
+export interface LeadFinderResultRow {
+  name: string;
+  company: string | null;
+  domain: string;
+  best_email: string | null;
+  best_pattern: string | null;
+  best_status: Status | null;
+  best_confidence: number | null;
+  candidates: LeadFinderCandidate[];
+  notes: string[];
+}
+
+export interface LeadFinderResponse {
+  count: number;
+  elapsed_ms: number;
+  results: LeadFinderResultRow[];
+}
+
 const RAW_BASE = import.meta.env.VITE_API_URL as string | undefined;
 export const API_BASE = (RAW_BASE && RAW_BASE.trim()) || window.location.origin;
 
@@ -232,4 +300,19 @@ export const api = {
   },
 
   jobCsvUrl: (jobId: string) => `${API_BASE}/api/jobs/${jobId}/results.csv`,
+
+  dashboard: () => request<DashboardSnapshot>("/api/dashboard"),
+
+  leadFinder: (
+    targets: LeadFinderTarget[],
+    opts: { check_mx?: boolean; check_smtp?: boolean } = {},
+  ) =>
+    request<LeadFinderResponse>("/api/lead-finder", {
+      method: "POST",
+      body: JSON.stringify({
+        targets,
+        check_mx: opts.check_mx ?? true,
+        check_smtp: opts.check_smtp ?? false,
+      }),
+    }),
 };
