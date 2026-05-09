@@ -1,29 +1,49 @@
-# Koyeb free backup (alternative tier 3 — always-on, no cold-start)
+# Koyeb backup (paid only as of 2024)
 
-This recipe deploys the Email Verifier backend on **Koyeb's free
-"nano" instance**, which gives you 512 MB RAM, 0.1 vCPU, and (unlike
-Render's free tier) **does not spin down after idle**. Result: a free
-always-on backup that's as snappy as Fly.io.
+> ⚠️ **Heads up:** Koyeb killed their free "nano" tier in 2024. Their
+> [pricing page](https://www.koyeb.com/pricing) now starts at **$29/mo
+> Pro plan + compute**. This recipe still works for a *paid* Koyeb
+> deploy, but if you're optimizing for free-tier hosting, prefer
+> `deploy/hugging-face/` (free always-on, 16 GB RAM) or `deploy/render/`
+> (free with cold-start) instead. See `deploy/README.md` for the full
+> updated tier table.
+>
+> Keeping this recipe around for users who already have paid Koyeb
+> infrastructure or want the Frankfurt POP redundancy.
+
+This recipe deploys the Email Verifier backend on **Koyeb**, which
+gives you a stable always-on instance with no cold-start (unlike
+Render's free tier). The recipe defaults to the smallest paid
+instance type.
 
 | What you get |
 |---|
-| Always-on free instance, no cold-start. |
+| Always-on instance, no cold-start. |
 | Frankfurt (`fra`) or Washington (`was`) POP — different network than Fly's `bom`. |
 | Auto-deploy from `main` on every push (toggleable). |
-| Same image as the Fly recipe, just with `EMAIL_VERIFIER_DEPLOY_TIER=3` and `EMAIL_VERIFIER_DEPLOY_LABEL="Koyeb free backup"`. |
+| Same image as the Fly recipe, just with `EMAIL_VERIFIER_DEPLOY_TIER=3` and `EMAIL_VERIFIER_DEPLOY_LABEL="Koyeb backup"`. |
 
 When this tier is the active one (because the Azure VPS *and* Fly.io are
-both unreachable), the frontend banner shows **"Running on Koyeb free
+both unreachable), the frontend banner shows **"Running on Koyeb
 backup"** with no degraded-features warning — every endpoint works.
 
 ## Prereqs
 
-- A Koyeb account: <https://app.koyeb.com/> (free, no credit card needed).
-- The Koyeb CLI installed:
+- A Koyeb account: <https://app.koyeb.com/>.
+  As of 2024 a paid plan is required ($29/mo Pro plan + compute);
+  see <https://www.koyeb.com/pricing>.
+- The Koyeb CLI installed (downloads from GitHub Releases):
   ```bash
-  curl -fsSL https://raw.githubusercontent.com/koyeb/koyeb-cli/master/install.sh | bash
+  mkdir -p ~/.koyeb/bin
+  curl -fsSL "https://github.com/koyeb/koyeb-cli/releases/download/v5.7.0/koyeb-cli_5.7.0_linux_amd64.tar.gz" \
+    | tar xz -C ~/.koyeb/bin/
+  chmod +x ~/.koyeb/bin/koyeb
+  export PATH="$HOME/.koyeb/bin:$PATH"
   ```
-  Or download from <https://github.com/koyeb/koyeb-cli/releases>.
+  (Replace `linux_amd64` with `darwin_arm64` / `darwin_amd64` /
+  `linux_arm64` as needed; bump the version number from
+  <https://github.com/koyeb/koyeb-cli/releases/latest> if you want
+  the newest CLI.)
 - A Koyeb personal access token: <https://app.koyeb.com/account/api>.
 
 ## Deploy

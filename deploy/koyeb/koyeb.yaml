@@ -1,5 +1,6 @@
 # Koyeb service definition for the Email Verifier backend (alternative
-# tier 3 — free, always-on). Deploy from the repo root with:
+# tier 3 — paid only since 2024; see deploy/koyeb/README.md for the
+# full deprecation note). Deploy from the repo root with:
 #
 #   koyeb service create email-verifier-koyeb \
 #     --app email-verifier \
@@ -7,7 +8,7 @@
 #     --git-branch main \
 #     --git-builder docker \
 #     --git-docker-dockerfile deploy/koyeb/Dockerfile \
-#     --instance-type free \
+#     --instance-type nano \
 #     --regions fra \
 #     --port 8080:http \
 #     --route /:8080 \
@@ -15,7 +16,7 @@
 #     --env PORT=8080 \
 #     --env WEB_CONCURRENCY=1 \
 #     --env EMAIL_VERIFIER_DEPLOY_TIER=3 \
-#     --env "EMAIL_VERIFIER_DEPLOY_LABEL=Koyeb free backup" \
+#     --env "EMAIL_VERIFIER_DEPLOY_LABEL=Koyeb backup" \
 #     --env EMAIL_VERIFIER_AUTH_REQUIRED=true \
 #     --env EMAIL_VERIFIER_ENABLE_SMTP=false \
 #     --env "EMAIL_VERIFIER_ALLOWED_ORIGINS=https://your-frontend.example.com"
@@ -38,9 +39,9 @@ git:
   docker:
     dockerfile: deploy/koyeb/Dockerfile
 
-instance_type: free  # 512 MB RAM, 0.1 vCPU, always-on
+instance_type: nano  # smallest paid instance; Koyeb's free tier was removed in 2024
 regions:
-  - fra  # Frankfurt — closest free region to South Asia. Use `was` (Washington) as alternative.
+  - fra  # Frankfurt POP — different network than Fly's `bom`. Use `was` (Washington) as alternative.
 
 ports:
   - port: 8080
@@ -66,7 +67,7 @@ env:
   - key: EMAIL_VERIFIER_DEPLOY_TIER
     value: "3"
   - key: EMAIL_VERIFIER_DEPLOY_LABEL
-    value: "Koyeb free backup"
+    value: "Koyeb backup"
   - key: EMAIL_VERIFIER_AUTH_REQUIRED
     value: "true"
   - key: EMAIL_VERIFIER_ENABLE_SMTP
