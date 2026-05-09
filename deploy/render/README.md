@@ -35,7 +35,7 @@ Add Environment Variable** and set:
 EMAIL_VERIFIER_ALLOWED_ORIGINS=https://your-frontend.example.com
 EMAIL_VERIFIER_AUTH_REQUIRED=true
 EMAIL_VERIFIER_ENABLE_SMTP=false
-FIREBASE_CREDENTIALS=<paste the entire service-account JSON>
+FIREBASE_ADMIN_CREDENTIALS=<paste the entire service-account JSON>
 ```
 
 The non-secret tier metadata (`EMAIL_VERIFIER_DEPLOY_TIER=3`,
