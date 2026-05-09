@@ -16,6 +16,7 @@ Performs four levels of verification, each progressively stricter and slower:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import smtplib
 import socket
 from dataclasses import dataclass, asdict, field
@@ -29,6 +30,8 @@ import dns.resolver
 from email_validator import EmailNotValidError, validate_email
 
 from .disposable import is_disposable, is_role
+from .locale import country_for_domain, country_for_host
+from .providers import provider_for_domain
 
 
 _RESOLVER = dns.asyncresolver.Resolver()
@@ -59,6 +62,13 @@ class VerificationResult:
     domain: Optional[str] = None
     is_disposable: bool = False
     is_role: bool = False
+    is_free_provider: bool = False
+    provider: Optional[str] = None
+    country_code: Optional[str] = None
+    country_name: Optional[str] = None
+    mx_country_code: Optional[str] = None
+    mx_country_name: Optional[str] = None
+    gravatar_url: Optional[str] = None
     has_mx: Optional[bool] = None
     mx_records: list[str] = field(default_factory=list)
     smtp_deliverable: Optional[bool] = None
@@ -71,6 +81,19 @@ class VerificationResult:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+def _gravatar_url(email: str) -> str:
+    """Construct the public Gravatar URL for an address.
+
+    No network call is made — Gravatar's URL scheme (md5 of the lowercase
+    address) is deterministic, so callers can pre-compute the URL and let
+    the browser fall back to the default avatar if no profile exists. This
+    makes the bulk-verifier dramatically faster than tools that probe
+    Gravatar's servers per-row.
+    """
+    digest = hashlib.md5(email.strip().lower().encode("utf-8")).hexdigest()
+    return f"https://www.gravatar.com/avatar/{digest}?d=404"
 
 
 # ---------------------------------------------------------------------------
@@ -267,6 +290,8 @@ async def verify_email(
         )
 
     local, domain = _split_address(normalized)
+    provider = provider_for_domain(domain)
+    cc, cn = country_for_domain(domain)
     result = VerificationResult(
         email=email,
         valid_syntax=True,
@@ -275,6 +300,11 @@ async def verify_email(
         domain=domain,
         is_disposable=is_disposable(domain),
         is_role=is_role(local),
+        is_free_provider=provider is not None,
+        provider=provider,
+        country_code=cc,
+        country_name=cn,
+        gravatar_url=_gravatar_url(normalized),
     )
 
     if result.is_disposable:
@@ -285,6 +315,18 @@ async def verify_email(
         mx_records = await _resolve_mx(domain)
         result.has_mx = bool(mx_records)
         result.mx_records = [host for _, host in mx_records]
+        if mx_records:
+            primary = mx_records[0][1]
+            mx_cc, mx_cn = country_for_host(primary)
+            if mx_cc:
+                result.mx_country_code = mx_cc
+                result.mx_country_name = mx_cn
+                # Promote MX-based country signal when the domain itself
+                # is on a generic TLD (.com / .io / etc.) that gave us no
+                # geographic clue.
+                if not result.country_code:
+                    result.country_code = mx_cc
+                    result.country_name = mx_cn
         if not mx_records:
             result.status = "invalid"
             result.reason = "no MX or A record for domain"
