@@ -9,6 +9,14 @@ import {
   type ReactNode,
 } from "react";
 import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import {
   Activity,
   AlertTriangle,
   ArrowUpRight,
@@ -42,6 +50,7 @@ import {
   Store,
   Trash2,
   Upload,
+  User as UserIcon,
   Users,
   X,
   XCircle,
@@ -66,7 +75,12 @@ import {
   type VerifyResult,
 } from "./lib/api";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { AuthGate } from "@/components/AuthGate";
+import { RequireAuth, FirebaseConfigGate } from "@/components/AuthGate";
+import { LandingPage } from "@/pages/LandingPage";
+import { LoginPage } from "@/pages/LoginPage";
+import { SignupPage } from "@/pages/SignupPage";
+import { ProfilePage } from "@/pages/ProfilePage";
+import { SettingsPage } from "@/pages/SettingsPage";
 import {
   downloadText,
   resultsToCsv,
@@ -83,7 +97,32 @@ type Tab =
   | "tools"
   | "api"
   | "keys"
+  | "profile"
+  | "settings"
   | "about";
+
+/**
+ * Mapping between URL slugs (under /app) and the internal Tab union. The
+ * router below uses these to translate route changes into tab changes
+ * without having to refactor the existing tab-based shell.
+ */
+const TAB_TO_PATH: Record<Tab, string> = {
+  "command-center": "",
+  "verify-bulk": "jobs",
+  "lead-finder": "leads",
+  extract: "extract",
+  "verify-one": "inspector",
+  tools: "tools",
+  keys: "keys",
+  api: "api",
+  profile: "profile",
+  settings: "settings",
+  about: "about",
+};
+
+const PATH_TO_TAB: Record<string, Tab> = Object.fromEntries(
+  Object.entries(TAB_TO_PATH).map(([k, v]) => [v, k as Tab]),
+) as Record<string, Tab>;
 
 const STATUS_META: Record<Status, { label: string; cls: string; icon: typeof CheckCircle2 }> = {
   valid: {
@@ -1022,7 +1061,8 @@ function ExportMenu({
         formats={formats}
         labels={labels}
         onLocal={(fmt) => exportLocal(fmt, rows, "all")}
-        serverUrl={(fmt) => (jobId ? api.jobResultsUrl(jobId, fmt) : null)}
+        hasServer={() => Boolean(jobId)}
+        onServer={(fmt) => (jobId ? api.downloadJobResults(jobId, fmt) : null)}
       />
       <ExportRow
         label="Valid only"
@@ -1031,7 +1071,8 @@ function ExportMenu({
         labels={labels}
         disabled={validOnly.length === 0}
         onLocal={(fmt) => exportLocal(fmt, validOnly, "valid")}
-        serverUrl={(fmt) => (jobId ? api.jobResultsUrl(jobId, fmt, ["valid"]) : null)}
+        hasServer={() => Boolean(jobId)}
+        onServer={(fmt) => (jobId ? api.downloadJobResults(jobId, fmt, ["valid"]) : null)}
       />
       <ExportRow
         label="Current filter"
@@ -1040,7 +1081,8 @@ function ExportMenu({
         labels={labels}
         disabled={filteredRows.length === 0}
         onLocal={(fmt) => exportLocal(fmt, filteredRows, "filtered")}
-        serverUrl={() => null}
+        hasServer={() => false}
+        onServer={() => null}
       />
     </div>
   );
@@ -1052,7 +1094,8 @@ function ExportRow({
   formats,
   labels,
   onLocal,
-  serverUrl,
+  onServer,
+  hasServer,
   disabled,
 }: {
   label: string;
@@ -1060,44 +1103,63 @@ function ExportRow({
   formats: ExportFormat[];
   labels: Record<ExportFormat, string>;
   onLocal: (fmt: ExportFormat) => void;
-  serverUrl: (fmt: ExportFormat) => string | null;
+  /** Server-side download (auth-gated). Triggers fetch+blob. */
+  onServer: (fmt: ExportFormat) => Promise<void> | null;
+  /** Whether the server-side download is available for this format. */
+  hasServer: (fmt: ExportFormat) => boolean;
   disabled?: boolean;
 }) {
+  const [busyFmt, setBusyFmt] = useState<ExportFormat | null>(null);
+  const [error, setError] = useState<string | null>(null);
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="text-sm text-zinc-300 w-32">
-        {label}{" "}
-        <span className="text-zinc-500 tabular-nums">({count})</span>
-      </div>
-      {formats.map((fmt) => {
-        const url = serverUrl(fmt);
-        const isDisabled = disabled || (fmt === "xlsx" && !url);
-        if (url) {
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="text-sm text-zinc-300 w-32">
+          {label}{" "}
+          <span className="text-zinc-500 tabular-nums">({count})</span>
+        </div>
+        {formats.map((fmt) => {
+          const useServer = hasServer(fmt);
+          const isDisabled =
+            disabled || (fmt === "xlsx" && !useServer) || busyFmt !== null;
+          const handler = async () => {
+            setError(null);
+            if (useServer) {
+              const promise = onServer(fmt);
+              if (!promise) return;
+              setBusyFmt(fmt);
+              try {
+                await promise;
+              } catch (e) {
+                setError((e as Error).message || "Download failed");
+              } finally {
+                setBusyFmt(null);
+              }
+            } else {
+              onLocal(fmt);
+            }
+          };
           return (
-            <a
+            <button
               key={fmt}
-              href={isDisabled ? undefined : url}
-              className={`inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900/40 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800/60 hover:text-white ${
-                isDisabled ? "opacity-40 pointer-events-none" : ""
-              }`}
+              type="button"
+              onClick={() => void handler()}
+              disabled={isDisabled}
+              className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900/40 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800/60 hover:text-white disabled:opacity-40"
             >
-              <Download className="w-3.5 h-3.5" />
+              {busyFmt === fmt ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
               {labels[fmt]}
-            </a>
+            </button>
           );
-        }
-        return (
-          <button
-            key={fmt}
-            onClick={() => onLocal(fmt)}
-            disabled={isDisabled}
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900/40 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800/60 hover:text-white disabled:opacity-40"
-          >
-            <Download className="w-3.5 h-3.5" />
-            {labels[fmt]}
-          </button>
-        );
-      })}
+        })}
+      </div>
+      {error && (
+        <div className="text-[11px] text-rose-300 pl-32">{error}</div>
+      )}
     </div>
   );
 }
@@ -2019,6 +2081,8 @@ const NAV: NavItem[] = [
   { key: "tools", label: "Marketplace", sublabel: "Utility Tools", icon: Store },
   { key: "keys", label: "API Keys", sublabel: "Personal Tokens", icon: KeyRound },
   { key: "api", label: "API", sublabel: "REST Reference", icon: Code2 },
+  { key: "profile", label: "Profile", sublabel: "Account Identity", icon: UserIcon },
+  { key: "settings", label: "Settings", sublabel: "Preferences", icon: Settings2 },
   { key: "about", label: "About", sublabel: "Credits & Limits", icon: Heart },
 ];
 
@@ -2567,12 +2631,17 @@ function CommandCenterView({
                       <td className="px-3 py-2.5 text-zinc-400 text-xs">{outcome}</td>
                       <td className="px-3 py-2.5 text-right">
                         {j.status === "done" ? (
-                          <a
-                            href={api.jobCsvUrl(j.job_id)}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void api
+                                .downloadJobResults(j.job_id, "csv")
+                                .catch(() => undefined);
+                            }}
                             className="text-xs text-indigo-300 hover:text-indigo-200"
                           >
                             Export CSV
-                          </a>
+                          </button>
                         ) : (
                           <span className="text-xs text-zinc-600">—</span>
                         )}
@@ -3332,9 +3401,9 @@ function ApiKeysView() {
                 <tr key={k.id} className="border-t border-white/5">
                   <td className="px-5 py-3 text-zinc-200">{k.name || "Untitled"}</td>
                   <td className="px-5 py-3 text-zinc-400 font-mono text-xs">{k.prefix}…</td>
-                  <td className="px-5 py-3 text-zinc-400 text-xs">{relativeTime(k.created_at * 1000)}</td>
+                  <td className="px-5 py-3 text-zinc-400 text-xs">{relativeTime(k.created_at)}</td>
                   <td className="px-5 py-3 text-zinc-400 text-xs">
-                    {k.last_used_at ? relativeTime(k.last_used_at * 1000) : "never"}
+                    {k.last_used_at ? relativeTime(k.last_used_at) : "never"}
                   </td>
                   <td className="px-5 py-3">
                     {k.revoked ? (
@@ -3396,25 +3465,96 @@ const PAGE_TITLES: Record<Tab, string> = {
   tools: "Tools Marketplace · Delowar's Email Verifier",
   keys: "API Keys · Delowar's Email Verifier",
   api: "REST API · Delowar's Email Verifier",
+  profile: "Profile · Delowar's Email Verifier",
+  settings: "Settings · Delowar's Email Verifier",
   about: "About · Delowar's Email Verifier",
 };
 
 export default function App() {
   return (
     <AuthProvider>
-      <AuthGate>
-        <AppShell />
-      </AuthGate>
+      <FirebaseConfigGate>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<HomeRoute />} />
+            <Route path="/login" element={<PublicOnly><LoginPage /></PublicOnly>} />
+            <Route path="/signup" element={<PublicOnly><SignupPage /></PublicOnly>} />
+            <Route
+              path="/app/*"
+              element={
+                <RequireAuth>
+                  <AppShell />
+                </RequireAuth>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </FirebaseConfigGate>
     </AuthProvider>
   );
 }
 
+/** Landing page for visitors; redirect to /app if already signed in. */
+function HomeRoute() {
+  const { user, ready } = useAuth();
+  if (!ready) {
+    return (
+      <div className="relative min-h-screen flex items-center justify-center text-zinc-100">
+        <div className="absolute inset-0 bg-grid pointer-events-none" />
+        <div className="absolute inset-0 bg-glow pointer-events-none" />
+        <div className="relative flex items-center gap-2 text-sm text-zinc-400">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+        </div>
+      </div>
+    );
+  }
+  if (user) return <Navigate to="/app" replace />;
+  return <LandingPage />;
+}
+
+/** Wraps a public route so signed-in users get bounced to /app. */
+function PublicOnly({ children }: { children: ReactNode }) {
+  const { user, ready } = useAuth();
+  if (!ready) {
+    return (
+      <div className="relative min-h-screen flex items-center justify-center text-zinc-100">
+        <div className="absolute inset-0 bg-grid pointer-events-none" />
+        <div className="absolute inset-0 bg-glow pointer-events-none" />
+        <div className="relative flex items-center gap-2 text-sm text-zinc-400">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+        </div>
+      </div>
+    );
+  }
+  if (user) return <Navigate to="/app" replace />;
+  return <>{children}</>;
+}
+
 function AppShell() {
   const { user, getIdToken, signOutUser } = useAuth();
-  const [tab, setTab] = useState<Tab>("command-center");
+  const navigate = useNavigate();
+  const location = useLocation();
   const [bulkSeed, setBulkSeed] = useState<string[]>([]);
   const [meta, setMeta] = useState<ServerMeta | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Translate URL path → internal tab. "/app" → command-center,
+  // "/app/jobs" → verify-bulk, etc. Unknown sub-paths fall back to
+  // command-center rather than 404'ing.
+  const tab: Tab = useMemo(() => {
+    const m = /^\/app\/?(.*)$/.exec(location.pathname);
+    const slug = (m?.[1] || "").replace(/\/$/, "");
+    return PATH_TO_TAB[slug] ?? "command-center";
+  }, [location.pathname]);
+
+  const setTab = useCallback(
+    (next: Tab) => {
+      const slug = TAB_TO_PATH[next];
+      navigate(slug ? `/app/${slug}` : "/app");
+    },
+    [navigate],
+  );
 
   useEffect(() => {
     setTokenGetter(() => getIdToken());
@@ -3474,6 +3614,8 @@ function AppShell() {
       subtitle:
         "Call the same engine from your code. Swagger UI is available at /docs; quick examples below.",
     },
+    profile: { title: "", subtitle: "" },
+    settings: { title: "", subtitle: "" },
     about: { title: "About", subtitle: "" },
   };
 
@@ -3554,6 +3696,8 @@ function AppShell() {
                 <ApiTab />
               </div>
             )}
+            {tab === "profile" && <ProfilePage />}
+            {tab === "settings" && <SettingsPage />}
             {tab === "about" && (
               <div className="space-y-6">
                 <PageHeader title={titles[tab].title} subtitle={titles[tab].subtitle} />
