@@ -1878,7 +1878,11 @@ function AboutTab({ meta }: { meta: ServerMeta | null }) {
             />
             <DetailRow
               label="Max upload size"
-              value={`${(meta.max_upload_bytes / 1024 / 1024).toFixed(0)} MiB`}
+              value={
+                meta.max_upload_bytes > 0
+                  ? `${(meta.max_upload_bytes / 1024 / 1024).toFixed(0)} MiB`
+                  : "No cap"
+              }
             />
             <DetailRow
               label="Max emails per sync verify"

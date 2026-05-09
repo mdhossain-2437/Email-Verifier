@@ -64,7 +64,23 @@ app.add_middleware(
 
 MAX_BULK_SYNC = 200  # cap for /api/verify-bulk to keep response under HTTP timeouts
 MAX_JOB_INPUTS = 100_000
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MiB upload cap
+
+
+def _parse_max_upload_bytes() -> int:
+    """Read EMAIL_VERIFIER_MAX_UPLOAD_BYTES. 0 (the default) disables the cap
+    entirely; any positive value is enforced as a hard byte limit on uploaded
+    files. We default to no cap so a 75-person team can throw real lists at
+    the verifier without hitting an arbitrary 50 MiB wall - operators who care
+    about VM memory pressure can opt back in via the env var."""
+    raw = os.environ.get("EMAIL_VERIFIER_MAX_UPLOAD_BYTES", "0").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return 0
+    return max(value, 0)
+
+
+MAX_UPLOAD_BYTES = _parse_max_upload_bytes()  # 0 = no cap (default)
 
 
 def _parse_status_filter(value: Optional[str]) -> Optional[set[str]]:
@@ -254,7 +270,7 @@ async def extract_file_endpoint(file: UploadFile = File(...)):
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="empty file")
-    if len(raw) > MAX_UPLOAD_BYTES:
+    if MAX_UPLOAD_BYTES and len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(
             status_code=413,
             detail=f"file is {len(raw):,} bytes; max {MAX_UPLOAD_BYTES:,} bytes",
@@ -484,7 +500,7 @@ async def submit_job_upload(
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="empty file")
-    if len(raw) > MAX_UPLOAD_BYTES:
+    if MAX_UPLOAD_BYTES and len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(
             status_code=413,
             detail=f"file is {len(raw):,} bytes; max {MAX_UPLOAD_BYTES:,} bytes",

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import importlib
 import io
 import json
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app import main as app_main
 from app.main import app
 
 
@@ -22,9 +24,32 @@ def test_meta_lists_features(client: TestClient):
     body = r.json()
     assert "csv" in body["supported_extensions"]
     assert "xlsx" in body["supported_extensions"]
-    assert body["max_upload_bytes"] > 0
+    # 0 means "no cap" (the default); a positive integer is a hard byte limit.
+    assert body["max_upload_bytes"] >= 0
     assert "csv" in body["download_formats"]
     assert "xlsx" in body["download_formats"]
+
+
+def test_default_upload_cap_is_unlimited():
+    """With no env override, the upload cap is disabled (0)."""
+    assert app_main.MAX_UPLOAD_BYTES == 0
+
+
+def test_upload_cap_env_var_is_honoured(monkeypatch):
+    """Operators can opt back in to a hard cap via env var."""
+    monkeypatch.setenv("EMAIL_VERIFIER_MAX_UPLOAD_BYTES", "1024")
+    reloaded = importlib.reload(app_main)
+    try:
+        assert reloaded.MAX_UPLOAD_BYTES == 1024
+        client = TestClient(reloaded.app)
+        # 2 KiB file is over the 1 KiB cap.
+        oversize = b"x@example.com\n" * 200  # > 1 KiB
+        files = {"file": ("big.csv", oversize, "text/csv")}
+        r = client.post("/api/extract-file", files=files)
+        assert r.status_code == 413
+    finally:
+        monkeypatch.delenv("EMAIL_VERIFIER_MAX_UPLOAD_BYTES", raising=False)
+        importlib.reload(app_main)
 
 
 def test_clean_dedupes_and_classifies(client: TestClient):
