@@ -67,6 +67,43 @@ app.add_middleware(
 
 MAX_BULK_SYNC = 200  # cap for /api/verify-bulk to keep response under HTTP timeouts
 MAX_JOB_INPUTS = 100_000
+# Smaller cap when running in fallback mode (e.g. on Vercel where serverless
+# functions time out at 60s). The frontend exposes this in the degraded-mode
+# banner so users understand why their massive list got rejected when the
+# primary server is down.
+MAX_JOB_INPUTS_FALLBACK = 1_000
+MAX_BULK_SYNC_FALLBACK = 50
+
+
+def _parse_deploy_mode() -> str:
+    """Read EMAIL_VERIFIER_DEPLOY_MODE. Two values are recognised:
+
+      primary  - this server is the long-lived backend (default).
+      fallback - this server is a short-lived shim (e.g. Vercel
+                 serverless) so heavy bulk endpoints are intentionally
+                 disabled and replaced with a 503 carrying a clear
+                 "primary unreachable - try again later" message.
+
+    Anything else falls back to ``primary`` so a typo never silently
+    cripples the long-lived server.
+    """
+    raw = os.environ.get("EMAIL_VERIFIER_DEPLOY_MODE", "primary").strip().lower()
+    return "fallback" if raw == "fallback" else "primary"
+
+
+DEPLOY_MODE = _parse_deploy_mode()
+
+
+def _is_fallback() -> bool:
+    return DEPLOY_MODE == "fallback"
+
+
+def _effective_max_job_inputs() -> int:
+    return MAX_JOB_INPUTS_FALLBACK if _is_fallback() else MAX_JOB_INPUTS
+
+
+def _effective_max_bulk_sync() -> int:
+    return MAX_BULK_SYNC_FALLBACK if _is_fallback() else MAX_BULK_SYNC
 
 
 def _parse_max_upload_bytes() -> int:
@@ -339,10 +376,12 @@ async def version_endpoint():
         "git_sha": os.environ.get("EMAIL_VERIFIER_GIT_SHA") or None,
         "build_time": os.environ.get("EMAIL_VERIFIER_BUILD_TIME") or None,
         "max_upload_bytes": MAX_UPLOAD_BYTES,
-        "max_job_inputs": MAX_JOB_INPUTS,
-        "max_bulk_sync": MAX_BULK_SYNC,
+        "max_job_inputs": _effective_max_job_inputs(),
+        "max_bulk_sync": _effective_max_bulk_sync(),
         "firebase_ready": auth.firebase_ready(),
         "firebase_init_error": auth.firebase_init_error(),
+        "deploy_mode": DEPLOY_MODE,
+        "is_fallback": _is_fallback(),
     }
 
 
@@ -354,10 +393,12 @@ async def meta_endpoint():
     return {
         "supported_extensions": supported_extensions(),
         "max_upload_bytes": MAX_UPLOAD_BYTES,
-        "max_bulk_sync": MAX_BULK_SYNC,
-        "max_job_inputs": MAX_JOB_INPUTS,
+        "max_bulk_sync": _effective_max_bulk_sync(),
+        "max_job_inputs": _effective_max_job_inputs(),
         "result_columns": _RESULT_COLUMNS,
         "download_formats": list(_FORMAT_MEDIA.keys()),
+        "deploy_mode": DEPLOY_MODE,
+        "is_fallback": _is_fallback(),
     }
 
 
@@ -628,11 +669,21 @@ async def verify_endpoint(req: VerifyRequest):
 
 @app.post("/api/verify-bulk", response_model=BulkVerifyResponse)
 async def verify_bulk_endpoint(req: BulkVerifyRequest):
-    if len(req.emails) > MAX_BULK_SYNC:
+    cap = _effective_max_bulk_sync()
+    if len(req.emails) > cap:
+        if _is_fallback():
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"this is a fallback shim (limit {cap}); the primary "
+                    f"server handles up to {MAX_BULK_SYNC} per call. Try "
+                    f"again when the primary is reachable, or split the list."
+                ),
+            )
         raise HTTPException(
             status_code=413,
             detail=(
-                f"max {MAX_BULK_SYNC} emails per synchronous request - submit "
+                f"max {cap} emails per synchronous request - submit "
                 f"larger batches via POST /api/jobs"
             ),
         )

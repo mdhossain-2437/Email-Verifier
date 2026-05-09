@@ -90,6 +90,22 @@ export interface ServerMeta {
   max_job_inputs: number;
   result_columns: string[];
   download_formats: string[];
+  deploy_mode?: "primary" | "fallback";
+  is_fallback?: boolean;
+}
+
+export interface ServerVersion {
+  name: string;
+  version: string;
+  git_sha: string | null;
+  build_time: string | null;
+  max_upload_bytes: number;
+  max_job_inputs: number;
+  max_bulk_sync: number;
+  firebase_ready: boolean;
+  firebase_init_error: string | null;
+  deploy_mode?: "primary" | "fallback";
+  is_fallback?: boolean;
 }
 
 export type ExportFormat = "csv" | "xlsx" | "txt" | "json";
@@ -194,8 +210,222 @@ export interface UserProfile {
   plan: string;
 }
 
+// ---------------------------------------------------------------------------
+// API base + automatic failover (primary VPS  ─►  Vercel fallback)
+// ---------------------------------------------------------------------------
+//
+// Two URLs configurable via env at build time:
+//   VITE_API_URL          - long-lived primary backend (e.g. Azure VPS)
+//   VITE_API_FALLBACK_URL - short-lived shim (e.g. Vercel serverless) that
+//                           takes over when the primary is unreachable.
+//
+// Both default to window.location.origin so a single-host deploy still works
+// out of the box. When primary and fallback resolve to the same origin we
+// disable failover (there's nothing to fail over to).
+//
+// Runtime behaviour:
+//   * `request()` always hits `currentBase`. Default is primary.
+//   * `probeHealth()` pings primary's /healthz; if it fails 2x in a row we
+//      flip currentBase -> fallback and broadcast `{ mode: "fallback" }`.
+//   * While on fallback, probeHealth keeps retrying primary; on first
+//      success we flip back and broadcast `{ mode: "primary" }`.
+//
+// The UI subscribes to these events to show / clear the degraded banner.
+
 const RAW_BASE = import.meta.env.VITE_API_URL as string | undefined;
-export const API_BASE = (RAW_BASE && RAW_BASE.trim()) || window.location.origin;
+const RAW_FALLBACK = import.meta.env.VITE_API_FALLBACK_URL as
+  | string
+  | undefined;
+
+const PRIMARY_BASE =
+  (RAW_BASE && RAW_BASE.trim()) || window.location.origin;
+const FALLBACK_BASE =
+  (RAW_FALLBACK && RAW_FALLBACK.trim()) || PRIMARY_BASE;
+
+const FAILOVER_AVAILABLE =
+  PRIMARY_BASE.replace(/\/$/, "") !== FALLBACK_BASE.replace(/\/$/, "");
+
+let _currentBase = PRIMARY_BASE;
+/** Backwards-compatible export — still readable by old callers, but mutable
+ *  here. New code should prefer `getApiBase()` to always read the live value.
+ */
+export let API_BASE: string = _currentBase;
+
+function setCurrentBase(next: string) {
+  if (next === _currentBase) return;
+  _currentBase = next;
+  API_BASE = next;
+}
+
+export function getApiBase(): string {
+  return _currentBase;
+}
+
+export type ServerMode = "primary" | "fallback";
+
+export interface ServerStatus {
+  /** Which base URL the client is currently routing through. */
+  mode: ServerMode;
+  /** Last health-probe outcome for the *primary* server. */
+  primaryHealthy: boolean;
+  /** Whether failover is even configured (i.e. primary !== fallback). */
+  failoverAvailable: boolean;
+  /** Last `/api/version` payload from the live server. Useful for badge UI. */
+  version: ServerVersion | null;
+  /** ms since epoch of the last successful probe (either side). */
+  lastProbeAt: number | null;
+  /** Last error message we saw probing primary (for debug UI). */
+  lastError: string | null;
+}
+
+let _status: ServerStatus = {
+  mode: "primary",
+  primaryHealthy: true,
+  failoverAvailable: FAILOVER_AVAILABLE,
+  version: null,
+  lastProbeAt: null,
+  lastError: null,
+};
+
+const _statusSubs = new Set<(s: ServerStatus) => void>();
+
+function setStatus(patch: Partial<ServerStatus>) {
+  _status = { ..._status, ...patch };
+  _statusSubs.forEach((fn) => {
+    try {
+      fn(_status);
+    } catch {
+      /* subscriber errors must not break the probe loop */
+    }
+  });
+}
+
+export function getServerStatus(): ServerStatus {
+  return _status;
+}
+
+export function subscribeServerStatus(
+  fn: (s: ServerStatus) => void,
+): () => void {
+  _statusSubs.add(fn);
+  fn(_status); // fire current state immediately so subscribers don't flicker
+  return () => {
+    _statusSubs.delete(fn);
+  };
+}
+
+/** Manually flip back to primary. Useful for the "retry now" button. */
+export async function tryPrimary(): Promise<boolean> {
+  const ok = await rawProbe(PRIMARY_BASE);
+  if (ok) {
+    setCurrentBase(PRIMARY_BASE);
+    setStatus({
+      mode: "primary",
+      primaryHealthy: true,
+      lastProbeAt: Date.now(),
+      lastError: null,
+    });
+  }
+  return ok;
+}
+
+async function rawProbe(base: string, signal?: AbortSignal): Promise<boolean> {
+  try {
+    const res = await fetch(`${base}/healthz`, {
+      method: "GET",
+      signal,
+      // healthz is public, no auth header.
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+let _consecutivePrimaryFails = 0;
+const FAIL_BEFORE_FAILOVER = 2; // require 2 misses to flip
+
+async function probeHealth(): Promise<void> {
+  const ok = await rawProbe(PRIMARY_BASE);
+  if (ok) {
+    _consecutivePrimaryFails = 0;
+    if (_currentBase !== PRIMARY_BASE) {
+      // primary is back — flip up. Re-fetch /api/version for the badge.
+      setCurrentBase(PRIMARY_BASE);
+      const ver = await fetchVersion(PRIMARY_BASE).catch(() => null);
+      setStatus({
+        mode: "primary",
+        primaryHealthy: true,
+        lastProbeAt: Date.now(),
+        lastError: null,
+        version: ver,
+      });
+    } else {
+      setStatus({
+        primaryHealthy: true,
+        lastProbeAt: Date.now(),
+        lastError: null,
+      });
+    }
+    return;
+  }
+
+  // primary failed
+  _consecutivePrimaryFails += 1;
+  if (
+    FAILOVER_AVAILABLE &&
+    _consecutivePrimaryFails >= FAIL_BEFORE_FAILOVER &&
+    _currentBase !== FALLBACK_BASE
+  ) {
+    const fallbackOk = await rawProbe(FALLBACK_BASE);
+    if (fallbackOk) {
+      setCurrentBase(FALLBACK_BASE);
+      const ver = await fetchVersion(FALLBACK_BASE).catch(() => null);
+      setStatus({
+        mode: "fallback",
+        primaryHealthy: false,
+        lastProbeAt: Date.now(),
+        lastError: "primary unreachable",
+        version: ver,
+      });
+      return;
+    }
+  }
+
+  setStatus({
+    primaryHealthy: false,
+    lastProbeAt: Date.now(),
+    lastError: "primary unreachable",
+  });
+}
+
+async function fetchVersion(base: string): Promise<ServerVersion | null> {
+  try {
+    const res = await fetch(`${base}/api/version`);
+    if (!res.ok) return null;
+    return (await res.json()) as ServerVersion;
+  } catch {
+    return null;
+  }
+}
+
+let _probeTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Start the background health-probe loop. Idempotent. */
+export function startHealthProbe(intervalMs = 15_000): () => void {
+  if (_probeTimer) return () => {};
+  // first probe right away so the banner reflects truth on page load
+  void probeHealth();
+  _probeTimer = setInterval(() => {
+    void probeHealth();
+  }, intervalMs);
+  return () => {
+    if (_probeTimer) {
+      clearInterval(_probeTimer);
+      _probeTimer = null;
+    }
+  };
+}
 
 /**
  * Optional token getter injected by the auth layer. When set, every
