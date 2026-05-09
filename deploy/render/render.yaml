@@ -36,4 +36,4 @@ services:
       #   EMAIL_VERIFIER_ALLOWED_ORIGINS=https://your-frontend.example.com
       #   EMAIL_VERIFIER_AUTH_REQUIRED=true
       #   EMAIL_VERIFIER_ENABLE_SMTP=false
-      #   FIREBASE_CREDENTIALS=<paste service-account JSON>
+      #   FIREBASE_ADMIN_CREDENTIALS=<paste service-account JSON>

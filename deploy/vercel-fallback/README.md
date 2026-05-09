@@ -49,7 +49,7 @@ EMAIL_VERIFIER_DEPLOY_LABEL=Vercel single-only
 EMAIL_VERIFIER_ALLOWED_ORIGINS=https://your-frontend.example.com
 EMAIL_VERIFIER_AUTH_REQUIRED=true
 EMAIL_VERIFIER_ENABLE_SMTP=false
-FIREBASE_CREDENTIALS=<paste service-account JSON>
+FIREBASE_ADMIN_CREDENTIALS=<paste service-account JSON>
 ```
 
 Even though the tier is hard-coded as a default in `api/index.py`, setting

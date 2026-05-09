@@ -70,4 +70,4 @@ defaults; the deploy-recipe README lists which ones are *required* per host.
 | `EMAIL_VERIFIER_AUTH_REQUIRED`       | `true` | `true` | `true` | `true` | Gates `/api/*` behind Firebase ID tokens. |
 | `EMAIL_VERIFIER_ENABLE_SMTP`         | optional | optional | optional | n/a | Tier 4 always disables SMTP. |
 | `WEB_CONCURRENCY`                    | `1`    | `1`    | `1`    | n/a | `_JOBS` registry is in-memory. |
-| `FIREBASE_CREDENTIALS`               | required | required | required | required | Service-account JSON, single-line. |
+| `FIREBASE_ADMIN_CREDENTIALS`         | required | required | required | required | Service-account JSON, single-line. |
