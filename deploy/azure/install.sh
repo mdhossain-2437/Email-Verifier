@@ -41,7 +41,7 @@
 # ----------------------------------------------------------------------------
 set -Eeuo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/mdhossaindelowardev/Email-Verifier.git}"
+REPO_URL="${REPO_URL:-https://github.com/mdhossain-2437/Email-Verifier.git}"
 APP_DIR="${APP_DIR:-/opt/email-verifier}"
 APP_USER="${APP_USER:-email-verifier}"
 

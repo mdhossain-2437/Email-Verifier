@@ -26,7 +26,7 @@ You do **not** need:
 SSH into the VM as a user with `sudo`, then run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mdhossaindelowardev/Email-Verifier/init/deploy/azure/install.sh \
+curl -fsSL https://raw.githubusercontent.com/mdhossain-2437/Email-Verifier/init/deploy/azure/install.sh \
   | sudo DOMAIN=verifier.example.com \
          EMAIL=you@example.com \
          FIREBASE_ADMIN_CREDENTIALS="$(cat firebase-admin.json)" \

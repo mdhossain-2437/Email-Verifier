@@ -1,0 +1,39 @@
+# Render.com Blueprint for the Email Verifier backend (tier 3 —
+# cold-start backup).
+#
+# Deploy by clicking "New > Blueprint" on https://dashboard.render.com/ and
+# pointing it at this repo (Render auto-detects ``deploy/render/render.yaml``
+# in the repo root, but you can also paste it inline).
+#
+# This is the *cold-start* backup tier — Render's free web service spins
+# down after 15 minutes of inactivity, so the first request after idle takes
+# ~30 seconds while the container starts back up. The frontend banner shows
+# the amber "warming up" message during this window.
+#
+# All endpoints work — bulk, jobs, dashboard. Just slower on the first hit.
+
+services:
+  - type: web
+    name: email-verifier-render
+    runtime: docker
+    plan: free
+    region: oregon  # change to your closest Render region
+    rootDir: backend
+    dockerfilePath: ../deploy/render/Dockerfile
+    dockerContext: ..
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: EMAIL_VERIFIER_DEPLOY_TIER
+        value: "3"
+      - key: EMAIL_VERIFIER_DEPLOY_LABEL
+        value: "Render free backup"
+      # Set the rest as secrets in the Render dashboard:
+      #   EMAIL_VERIFIER_ALLOWED_ORIGINS=https://your-frontend.example.com
+      #   EMAIL_VERIFIER_AUTH_REQUIRED=true
+      #   EMAIL_VERIFIER_ENABLE_SMTP=false
+      #   FIREBASE_CREDENTIALS=<paste service-account JSON>

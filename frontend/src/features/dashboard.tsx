@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Mail,
   Plus,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -19,13 +20,15 @@ import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 
 import {
   api,
+  tryPrimary,
   type DashboardSnapshot,
   type ServerMeta,
   type Status,
 } from "@/lib/api";
-import { PrimaryButton } from "@/components/common";
+import { FeatureUnavailableCard, PrimaryButton } from "@/components/common";
 import { PageHeader } from "@/components/Layout";
 import { formatBigNumber, jobLabel, relativeTime } from "@/lib/format";
+import { useServerStatus } from "@/lib/useServerStatus";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -84,12 +87,17 @@ export function CommandCenterView({
   meta: ServerMeta | null;
   onNewJob: () => void;
 }) {
+  const serverStatus = useServerStatus();
+  const dashboardAvailable =
+    serverStatus.capabilities?.dashboard !== false;
   const [snap, setSnap] = useState<DashboardSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
+    if (!dashboardAvailable) return undefined;
     let stop = false;
     const tick = async () => {
       try {
@@ -109,7 +117,7 @@ export function CommandCenterView({
       stop = true;
       clearInterval(id);
     };
-  }, [refreshTick]);
+  }, [refreshTick, dashboardAvailable]);
 
   const volumeData = useMemo(() => {
     const buckets = snap?.volume_7d ?? [0, 0, 0, 0, 0, 0, 0];
@@ -121,6 +129,41 @@ export function CommandCenterView({
     const peak = Math.max(...snap.volume_7d, 0);
     return formatBigNumber(peak);
   }, [snap]);
+
+  if (!dashboardAvailable) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Command Center"
+          subtitle="Real-time overview of your verification ecosystem."
+        />
+        <FeatureUnavailableCard
+          Icon={ShieldAlert}
+          title="Dashboard paused"
+          message={
+            <>
+              The dashboard reads live job stats from the in-memory job
+              registry, which doesn't exist on{" "}
+              <strong>
+                {serverStatus.deployLabel ?? "the single-only fallback"}
+              </strong>
+              . Stats and history come back the moment the primary server
+              is online again.
+            </>
+          }
+          retrying={retrying}
+          onRetry={async () => {
+            setRetrying(true);
+            try {
+              await tryPrimary();
+            } finally {
+              setRetrying(false);
+            }
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

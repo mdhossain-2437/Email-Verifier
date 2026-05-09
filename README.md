@@ -159,67 +159,65 @@ npm run build
 
 ## Deployment
 
-### Vercel (frontend on Vercel, backend on Vercel "experimental services" routes)
+The frontend ships a **load balancer** that probes a configurable list of
+backends every 15 seconds and routes traffic to the highest-priority
+healthy one. When a higher tier comes back online, traffic auto-flips
+back. Each backend tier reports its capabilities on `/api/meta` so the UI
+disables features the active tier can't run (e.g. bulk uploads on a
+serverless deploy).
 
-The repo includes [`vercel.json`](./vercel.json) preconfigured with the
-[experimental services](https://vercel.com/docs/projects/project-configuration#experimentalservices)
-block:
+The supported tiers, ranked by capability:
 
-```json
-"experimentalServices": {
-  "frontend": { "entrypoint": "frontend", "routePrefix": "/", "framework": "vite" },
-  "backend":  { "entrypoint": "backend",  "routePrefix": "/_/backend" }
-}
+| Tier | Recipe                                                | Hosting                | Cost  | Bulk? | Cold-start? |
+|-----:|-------------------------------------------------------|------------------------|-------|-------|-------------|
+| 1    | [`deploy/azure/`](./deploy/azure/)                    | Azure VPS + systemd    | Paid  | Yes   | No          |
+| 2    | [`deploy/fly/`](./deploy/fly/)                        | Fly.io always-on free  | Free  | Yes   | No          |
+| 3    | [`deploy/render/`](./deploy/render/)                  | Render free web service| Free  | Yes   | ~30s        |
+| 4    | [`deploy/vercel-fallback/`](./deploy/vercel-fallback/)| Vercel serverless      | Free  | **No**| ~1s         |
+
+The full tour, including how the load balancer picks a backend and the
+env-var matrix per tier, is in [`deploy/README.md`](./deploy/README.md).
+
+The recommended production layout is:
+
+- **Tier 1 (Azure VPS)** — your long-lived primary. Bulk + single + jobs +
+  dashboard.
+- **Tier 2 (Fly.io)** — free always-on backup. Same code, full features.
+- **Tier 4 (Vercel serverless)** — last-resort fallback for one-off single
+  verifications when both VPS and Fly.io are down.
+
+You wire the tiers together by setting `VITE_API_URLS` on the **frontend**
+deploy (Vercel SPA / Cloudflare Pages / wherever you serve `frontend/dist`)
+to a comma-separated list of backend base URLs, in priority order:
+
+```
+VITE_API_URLS=https://api.yourdomain.com,https://your-fly-app.fly.dev,https://your-fallback.vercel.app
 ```
 
-Plus rewrites that map `/api/*`, `/healthz`, `/docs`, and `/openapi.json`
-through `/_/backend/*` and a SPA fallback for client-side routes.
+The legacy `VITE_API_URL` + `VITE_API_FALLBACK_URL` two-tier env vars are
+still honoured for back-compat.
 
-To deploy:
+### Vercel (frontend SPA only)
 
-1. Import this repo into Vercel (`https://github.com/mdhossaindelowardev/Email-Verifier`).
-2. In **Project → Settings → Environment Variables**, add:
-   - `FIREBASE_ADMIN_CREDENTIALS` — paste the full service-account JSON.
+The root [`vercel.json`](./vercel.json) deploys the SPA (`frontend/dist`)
+as a static site with a SPA-fallback rewrite. To deploy:
+
+1. Import this repo into Vercel (`https://github.com/mdhossain-2437/Email-Verifier`).
+2. In **Project → Settings → Environment Variables**, set:
+   - `VITE_API_URLS` — comma-separated list of backend URLs (see above).
    - `VITE_FIREBASE_API_KEY` … (six fields from Firebase Web config).
-   - `EMAIL_VERIFIER_MAX_UPLOAD_BYTES` (optional, defaults to 0 = unbounded).
 3. Hit **Deploy**.
 
-> ⚠️ **Heads-up about Vercel and long-running jobs.** Vercel's serverless
-> runtime caps function execution at 10s (Hobby) / 60s (Pro). The bulk
-> verifier processes jobs in the background for **minutes** at a time.
-> If you plan to verify >10K-row lists routinely, the bulk endpoints
-> will hit the timeout cliff on Vercel. The recommended setup is:
->
-> - **Vercel** for the frontend + lightweight `/api/*` routes (extract,
->   single verify, jobs/list, results, keys, whoami, version, meta).
-> - **Azure VPS** (or any always-on host) running the FastAPI bulk worker.
-> - Set `VITE_API_URL` to the always-on host so bulk jobs go there
->   directly and skip Vercel.
->
-> If you don't need >10K-row jobs, Vercel-only works fine.
+For the **Vercel serverless backend fallback** (tier 4), use a *separate*
+Vercel project and follow [`deploy/vercel-fallback/README.md`](./deploy/vercel-fallback/README.md).
 
-The default `vercel.json` assumes single-host deployment via the
-experimental services block. For the split deployment, leave only the
-frontend half:
-
-```json
-{
-  "experimentalServices": {
-    "frontend": { "entrypoint": "frontend", "routePrefix": "/", "framework": "vite" }
-  }
-}
-```
-
-…and set `VITE_API_URL=https://your-azure-host.example.com` in Vercel
-env vars.
-
-### Azure Ubuntu VPS (recommended for unlimited bulk)
+### Azure Ubuntu VPS (recommended for tier 1)
 
 A one-shot installer is included that handles Node, Python, Poetry,
 Caddy, systemd, and Let's Encrypt.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mdhossaindelowardev/Email-Verifier/init/deploy/azure/install.sh \
+curl -fsSL https://raw.githubusercontent.com/mdhossain-2437/Email-Verifier/init/deploy/azure/install.sh \
   | sudo DOMAIN=verifier.example.com \
          EMAIL=you@example.com \
          FIREBASE_ADMIN_CREDENTIALS="$(cat firebase-admin.json)" \
@@ -248,10 +246,10 @@ Output:
 
 | Host | Pattern | Notes |
 | --- | --- | --- |
-| **Render** | `Web Service` for backend (`uvicorn app.main:app …`) + `Static Site` for frontend | Free tier sleeps after 15 min idle; cold start ≈30 s. |
-| **Fly.io** | One Fly app for backend, frontend on Fly Static or Vercel | Bring your own machine quota. |
-| **Hetzner** | Same as Azure VPS — use `deploy/azure/install.sh` | $5/mo VPS handles 75-person teams comfortably. |
-| **Docker** | Build images per directory; reverse-proxy via Traefik or Caddy | No prebuilt Docker image yet — PRs welcome. |
+| **Hetzner / DigitalOcean / Linode** | Same as Azure VPS — use `deploy/azure/install.sh` | $5/mo VPS handles 75-person teams comfortably. |
+| **Koyeb / Railway / Northflank** | Point at the `deploy/fly/Dockerfile` (works as-is) and set `EMAIL_VERIFIER_DEPLOY_TIER=2` (or `3` for cold-start tiers) | All three have free / hobby tiers similar to Fly. |
+| **Cloudflare Workers / Pages** | Frontend only — Workers don't run Python. Pair with a tier 1/2/3 backend via `VITE_API_URLS`. | Best free static hosting for the SPA. |
+| **AWS Lambda + API Gateway** | Mirror `deploy/vercel-fallback/api/index.py` into a Lambda function URL | Single-only fallback (tier 4); 10–60s timeout same as Vercel. |
 
 ---
 
@@ -270,12 +268,17 @@ Output:
 | `EMAIL_VERIFIER_SMTP_CACHE_TTL` | `300` | TTL (seconds) for cached SMTP probe outcomes. |
 | `EMAIL_VERIFIER_CACHE_MAXSIZE` | `4096` | Hard upper bound on entries per cache (LRU-evicted past this). |
 | `WEB_CONCURRENCY` | `1` | Set to `1`. The job registry is in-memory and **does not** survive being sharded across multiple workers — uploads to one worker would be invisible to the others. The systemd unit pins `--workers 1`; if you set this higher the app logs a loud warning at startup. |
+| `EMAIL_VERIFIER_DEPLOY_TIER` | `1` | Tier this deploy advertises on `/api/meta` (`1` = primary, `2` = full backup, `3` = cold-start backup, `4` = single-verify only). Tier 4 turns off `/api/jobs/*` and `/api/dashboard` so the frontend can show maintenance cards. |
+| `EMAIL_VERIFIER_DEPLOY_LABEL` | (computed from tier) | Human label shown in the frontend banner (e.g. `"Fly.io backup"`, `"Render free backup"`). |
+| `EMAIL_VERIFIER_DEPLOY_MODE` | `primary` | Legacy two-state version of `EMAIL_VERIFIER_DEPLOY_TIER`. Setting it to `fallback` is equivalent to `EMAIL_VERIFIER_DEPLOY_TIER=4`. Kept for back-compat. |
 
 ### Frontend env vars (set in `frontend/.env` or your host's UI)
 
 | Var | Description |
 | --- | --- |
-| `VITE_API_URL` | Backend base URL. Default `http://localhost:8000`. |
+| `VITE_API_URLS` | Comma-separated list of backend base URLs in priority order. The frontend health-probes each one and routes traffic to the highest-priority healthy backend. Falls back to `VITE_API_URL` + `VITE_API_FALLBACK_URL` if unset. |
+| `VITE_API_URL` | (legacy) Single backend base URL. Default `http://localhost:8000`. |
+| `VITE_API_FALLBACK_URL` | (legacy) Two-tier fallback URL. Folded into `VITE_API_URLS` for back-compat. |
 | `VITE_FIREBASE_API_KEY` | Public Firebase Web key. |
 | `VITE_FIREBASE_AUTH_DOMAIN` | e.g. `your-project.firebaseapp.com`. |
 | `VITE_FIREBASE_PROJECT_ID` | Firebase project ID. |
@@ -385,5 +388,5 @@ throughput, self-hosting affordances, and the auth model. See
 [MIT](./LICENSE) © Delowar Hossain.
 
 If you ship something cool with this, please drop a star ⭐ on
-[GitHub](https://github.com/mdhossaindelowardev/Email-Verifier) and ping
+[GitHub](https://github.com/mdhossain-2437/Email-Verifier) and ping
 me on [my portfolio](https://delowarhossain.dev) — I'd love to see it.

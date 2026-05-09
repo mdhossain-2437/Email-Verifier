@@ -44,7 +44,7 @@ interface VersionPayload {
 
 const PORTFOLIO_URL = "https://delowarhossain.dev";
 const GITHUB_PROFILE = "https://github.com/mdhossain-2437";
-const GITHUB_REPO = "https://github.com/mdhossaindelowardev/Email-Verifier";
+const GITHUB_REPO = "https://github.com/mdhossain-2437/Email-Verifier";
 
 const FEATURES = [
   {

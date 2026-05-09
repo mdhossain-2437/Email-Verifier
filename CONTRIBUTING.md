@@ -102,7 +102,7 @@ contract.
 
 ## Reporting bugs
 
-Open a [GitHub issue](https://github.com/mdhossaindelowardev/Email-Verifier/issues/new).
+Open a [GitHub issue](https://github.com/mdhossain-2437/Email-Verifier/issues/new).
 Include:
 
 - What you ran (curl command, UI flow, etc.)

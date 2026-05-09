@@ -85,7 +85,7 @@ export const STATUS_META: Record<
 
 export const PORTFOLIO_URL = "https://delowarhossain.dev";
 export const GITHUB_PROFILE = "https://github.com/mdhossain-2437";
-export const GITHUB_REPO = "https://github.com/mdhossaindelowardev/Email-Verifier";
+export const GITHUB_REPO = "https://github.com/mdhossain-2437/Email-Verifier";
 
 export const SAMPLE_TEXT = `Hello team - please reach out to sales@github.com for partnership inquiries
 and to support@github.com for help. Marketing reports go to ada [at] example

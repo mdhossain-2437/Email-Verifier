@@ -162,3 +162,54 @@ export function RouteFallback() {
     </div>
   );
 }
+
+/**
+ * Maintenance-mode card shown when the active backend tier doesn't support
+ * the feature on this page (e.g. ``bulk_jobs`` on a single-only Vercel
+ * fallback). Gives the user a clear explanation and an action to retry the
+ * primary, instead of letting them upload a file that's going to 503.
+ */
+export function FeatureUnavailableCard({
+  title,
+  message,
+  onRetry,
+  retrying,
+  Icon,
+}: {
+  title: string;
+  message: ReactNode;
+  onRetry?: () => void | Promise<void>;
+  retrying?: boolean;
+  Icon?: LucideIcon;
+}) {
+  return (
+    <div className="rounded-2xl border border-orange-400/30 bg-orange-500/10 p-6 sm:p-8 text-orange-100">
+      <div className="flex items-start gap-3">
+        {Icon && <Icon className="w-5 h-5 mt-0.5 flex-shrink-0" />}
+        <div className="flex-1 space-y-2">
+          <h2 className="text-lg font-semibold text-orange-50">{title}</h2>
+          <div className="text-sm leading-relaxed text-orange-100/90">
+            {message}
+          </div>
+          {onRetry && (
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => void onRetry()}
+                disabled={retrying}
+                className="inline-flex items-center gap-2 rounded-md border border-orange-300/40 bg-orange-300/10 hover:bg-orange-300/20 disabled:opacity-60 px-3 py-1.5 text-sm font-medium text-orange-50 transition"
+              >
+                {retrying ? (
+                  <Spinner className="w-4 h-4" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
+                Try primary again
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

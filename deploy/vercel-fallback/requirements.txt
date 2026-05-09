@@ -1,0 +1,12 @@
+# Vercel's Python runtime resolves these against the function's deployed
+# bundle. We mirror the runtime deps in backend/pyproject.toml — keep them
+# in sync when bumping versions.
+#
+# (Bulk-only deps like openpyxl are intentionally still here because the
+# code path imports them at module load. Disabling that lazily would let us
+# trim the cold-start size.)
+fastapi[standard]==0.136.1
+email-validator==2.3.0
+dnspython==2.8.0
+openpyxl==3.1.5
+firebase-admin==7.4.0

@@ -20,6 +20,7 @@ import {
 
 import {
   api,
+  tryPrimary,
   type LeadFinderCandidate,
   type LeadFinderResultRow,
   type LeadFinderTarget,
@@ -27,17 +28,21 @@ import {
 } from "@/lib/api";
 import { downloadText } from "@/lib/csv";
 import {
+  FeatureUnavailableCard,
   GhostButton,
   PrimaryButton,
   Toggle,
 } from "@/components/common";
 import { PageHeader } from "@/components/Layout";
+import { useServerStatus } from "@/lib/useServerStatus";
 
 const LEAD_FINDER_SAMPLE = `Jane Doe, ACME Inc, acme.com
 Sam Patel, GitHub, github.com
 Maria Silva, Mozilla, mozilla.org`;
 
 export function LeadFinderView() {
+  const serverStatus = useServerStatus();
+  const [retrying, setRetrying] = useState(false);
   const [text, setText] = useState(LEAD_FINDER_SAMPLE);
   const [checkMx, setCheckMx] = useState(true);
   const [checkSmtp, setCheckSmtp] = useState(false);
@@ -128,6 +133,44 @@ export function LeadFinderView() {
       .map((r) => r.best_email!);
     downloadText("lead-finder-results.txt", lines.join("\n") + "\n");
   };
+
+  // Lead Finder runs many SMTP/DNS probes in a single request — too heavy
+  // for serverless. Gate on the same ``bulk_jobs`` capability flag.
+  const leadFinderAvailable =
+    serverStatus.capabilities?.bulk_jobs !== false;
+  if (!leadFinderAvailable) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Targeted Lead Finder"
+          subtitle="Bring-your-own-targets pattern lookup. Generates likely work-email patterns and verifies them on the fly."
+        />
+        <FeatureUnavailableCard
+          Icon={ShieldAlert}
+          title="Lead Finder paused"
+          message={
+            <>
+              The main server is offline; the app is running on{" "}
+              <strong>
+                {serverStatus.deployLabel ?? "the single-only fallback"}
+              </strong>{" "}
+              which can't run multi-target lookups. Lead Finder will return
+              when the primary server is back.
+            </>
+          }
+          retrying={retrying}
+          onRetry={async () => {
+            setRetrying(true);
+            try {
+              await tryPrimary();
+            } finally {
+              setRetrying(false);
+            }
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

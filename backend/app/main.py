@@ -135,11 +135,67 @@ def _parse_deploy_mode() -> str:
     return "fallback" if raw == "fallback" else "primary"
 
 
+# Deployment tiers. The frontend probes a list of backends in priority order
+# (tier 1 first) and picks the first healthy one. Each tier reports its own
+# capabilities so the UI can disable features that the active tier can't run
+# (e.g. async bulk jobs on a 10-second-timeout serverless function).
+#
+#   1 = primary             — full features, long-lived (e.g. Azure VPS).
+#   2 = secondary-full      — full features, free hosting (e.g. Fly.io).
+#   3 = secondary-degraded  — full features but slow first request after idle
+#                              (e.g. Render free, Koyeb free).
+#   4 = single-only         — sync verify only; no bulk, no jobs (e.g. Vercel
+#                              serverless, AWS Lambda free tier).
+DEPLOY_TIER_PRIMARY = 1
+DEPLOY_TIER_SECONDARY_FULL = 2
+DEPLOY_TIER_SECONDARY_DEGRADED = 3
+DEPLOY_TIER_SINGLE_ONLY = 4
+
+
+def _parse_deploy_tier() -> int:
+    """Read EMAIL_VERIFIER_DEPLOY_TIER. Falls back to inferring from
+    ``EMAIL_VERIFIER_DEPLOY_MODE`` for backwards compatibility (fallback ->
+    tier 4, primary -> tier 1)."""
+    raw = os.environ.get("EMAIL_VERIFIER_DEPLOY_TIER", "").strip()
+    if raw:
+        try:
+            value = int(raw)
+        except ValueError:
+            value = 0
+        if value in (1, 2, 3, 4):
+            return value
+    # Legacy: derive from DEPLOY_MODE.
+    return DEPLOY_TIER_SINGLE_ONLY if DEPLOY_MODE == "fallback" else DEPLOY_TIER_PRIMARY
+
+
+def _default_deploy_label(tier: int) -> str:
+    return {
+        DEPLOY_TIER_PRIMARY: "Primary",
+        DEPLOY_TIER_SECONDARY_FULL: "Full backup",
+        DEPLOY_TIER_SECONDARY_DEGRADED: "Cold-start backup",
+        DEPLOY_TIER_SINGLE_ONLY: "Single-only fallback",
+    }.get(tier, "Primary")
+
+
 DEPLOY_MODE = _parse_deploy_mode()
+DEPLOY_TIER = _parse_deploy_tier()
+DEPLOY_LABEL = (
+    os.environ.get("EMAIL_VERIFIER_DEPLOY_LABEL", "").strip()
+    or _default_deploy_label(DEPLOY_TIER)
+)
 
 
 def _is_fallback() -> bool:
-    return DEPLOY_MODE == "fallback"
+    """True when the deploy is running in single-only mode (tier 4) where
+    bulk endpoints should be shut off and aggressively low caps applied.
+
+    Note that the legacy ``EMAIL_VERIFIER_DEPLOY_MODE=fallback`` env var
+    sets the *default* tier to 4 (see ``_parse_deploy_tier``), but an
+    explicit ``EMAIL_VERIFIER_DEPLOY_TIER`` always wins. This means
+    operators upgrading a serverless deploy to a full free host (Fly.io,
+    Render) only need to set ``DEPLOY_TIER=2``.
+    """
+    return DEPLOY_TIER == DEPLOY_TIER_SINGLE_ONLY
 
 
 def _effective_max_job_inputs() -> int:
@@ -148,6 +204,27 @@ def _effective_max_job_inputs() -> int:
 
 def _effective_max_bulk_sync() -> int:
     return MAX_BULK_SYNC_FALLBACK if _is_fallback() else MAX_BULK_SYNC
+
+
+def _capabilities() -> dict:
+    """Self-describing feature flags for the active deploy. Consumed by the
+    SPA to decide which UI affordances to enable. Always honest — every flag
+    here directly corresponds to whether the matching endpoint will work."""
+    bulk_supported = not _is_fallback()
+    smtp_enabled = (
+        os.environ.get("EMAIL_VERIFIER_ENABLE_SMTP", "").strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
+    return {
+        "single_verify": True,
+        "extract": True,
+        "clean": True,
+        "bulk_sync": True,  # /api/verify-bulk works on every tier (with caps)
+        "bulk_jobs": bulk_supported,  # /api/jobs/* is async-only, no serverless
+        "smtp_probe": smtp_enabled and bulk_supported,
+        "dashboard": bulk_supported,  # depends on the in-memory job registry
+        "api_keys": True,
+    }
 
 
 def _parse_max_upload_bytes() -> int:
@@ -473,6 +550,9 @@ async def version_endpoint():
         "firebase_init_error": auth.firebase_init_error(),
         "deploy_mode": DEPLOY_MODE,
         "is_fallback": _is_fallback(),
+        "deploy_tier": DEPLOY_TIER,
+        "deploy_label": DEPLOY_LABEL,
+        "capabilities": _capabilities(),
     }
 
 
@@ -490,6 +570,9 @@ async def meta_endpoint():
         "download_formats": list(_FORMAT_MEDIA.keys()),
         "deploy_mode": DEPLOY_MODE,
         "is_fallback": _is_fallback(),
+        "deploy_tier": DEPLOY_TIER,
+        "deploy_label": DEPLOY_LABEL,
+        "capabilities": _capabilities(),
     }
 
 
