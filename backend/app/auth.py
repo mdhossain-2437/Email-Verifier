@@ -114,6 +114,39 @@ def firebase_ready() -> bool:
     return _admin_app is not None
 
 
+_firestore_ping_ok: Optional[bool] = None
+_firestore_ping_error: Optional[str] = None
+
+
+def firestore_ping() -> tuple[bool, Optional[str]]:
+    """One-shot connectivity check against Firestore.
+
+    Runs a lightweight ``collection.limit(0)`` query on first call and
+    caches the result for the lifetime of the process.  Returns
+    ``(ok, error_message)``.
+    """
+    global _firestore_ping_ok, _firestore_ping_error
+    if _firestore_ping_ok is not None:
+        return _firestore_ping_ok, _firestore_ping_error
+
+    db = firestore_db()
+    if db is None:
+        _firestore_ping_ok = False
+        _firestore_ping_error = "Firestore client not initialized"
+        return _firestore_ping_ok, _firestore_ping_error
+
+    try:
+        list(db.collection("_healthz").limit(1).stream())
+        _firestore_ping_ok = True
+        _firestore_ping_error = None
+    except Exception as exc:  # noqa: BLE001
+        _firestore_ping_ok = False
+        _firestore_ping_error = str(exc)
+        logger.warning("Firestore ping failed: %s", exc)
+
+    return _firestore_ping_ok, _firestore_ping_error
+
+
 def firebase_init_error() -> Optional[str]:
     """Human-readable reason for why Firebase isn't ready, if any."""
     _init_admin_app()

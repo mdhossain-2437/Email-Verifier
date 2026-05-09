@@ -42,6 +42,7 @@ from .disposable import is_disposable, is_role
 from .extractor import extract_emails, extract_unique
 from .files import extract_from_file, supported_extensions
 from .lead_finder import LeadInput, verify_lead
+from .lead_providers import registry as lead_registry, find_leads_multi
 from .locale import country_for_domain
 from .providers import provider_for_domain
 from .verifier import VerificationResult, verify_email, verify_many
@@ -538,6 +539,7 @@ async def version_endpoint():
     the backend has loaded its service-account credentials. We expose this
     on the public version endpoint (not on a protected route) precisely so
     a 401-ed client can still tell *why* it's getting locked out."""
+    firestore_ok, firestore_error = auth.firestore_ping()
     return {
         "name": "email-verifier",
         "version": app.version,
@@ -548,6 +550,8 @@ async def version_endpoint():
         "max_bulk_sync": _effective_max_bulk_sync(),
         "firebase_ready": auth.firebase_ready(),
         "firebase_init_error": auth.firebase_init_error(),
+        "firestore_ok": firestore_ok,
+        "firestore_error": firestore_error,
         "deploy_mode": DEPLOY_MODE,
         "is_fallback": _is_fallback(),
         "deploy_tier": DEPLOY_TIER,
@@ -1248,6 +1252,88 @@ async def lead_finder_endpoint(req: LeadFinderRequest):
         count=len(rows),
         elapsed_ms=(time.perf_counter() - started) * 1000,
         results=rows,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Lead-finder v2 — multi-provider domain lookup
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/lead-finder/providers")
+async def lead_finder_providers():
+    """List registered lead-finding providers and whether they're enabled."""
+    return {"providers": lead_registry()}
+
+
+class DomainSearchRequest(BaseModel):
+    domain: str = Field(..., description="Target domain, e.g. 'acme.com'.")
+    person_name: Optional[str] = Field(None, description="Optional person name to narrow results.")
+    company: Optional[str] = Field(None, description="Company name (display only).")
+    providers: Optional[list[str]] = Field(
+        None,
+        description="Only use these providers. Omit to use all enabled ones.",
+    )
+
+
+class DomainSearchResultItem(BaseModel):
+    email: str
+    confidence: float
+    source: str
+    name: Optional[str] = None
+    title: Optional[str] = None
+
+
+class DomainSearchResponse(BaseModel):
+    domain: str
+    total: int
+    elapsed_ms: float
+    providers_used: list[str]
+    results: list[DomainSearchResultItem]
+
+
+@app.post("/api/lead-finder/domain", response_model=DomainSearchResponse)
+async def lead_finder_domain_search(req: DomainSearchRequest):
+    """Search for emails at a domain using all enabled providers.
+
+    This is the v2 lead-finder that merges results from the pattern
+    engine, website crawl, Hunter.io, and Brave Search (whichever are
+    configured). Unlike the v1 ``/api/lead-finder`` endpoint which needs
+    per-person targets, this accepts just a domain and returns every
+    email it can find.
+    """
+    started = time.perf_counter()
+    by_provider = await find_leads_multi(
+        domain=req.domain,
+        person_name=req.person_name,
+        company=req.company,
+        providers=req.providers,
+    )
+
+    # Deduplicate across providers, keeping the highest confidence.
+    merged: dict[str, DomainSearchResultItem] = {}
+    for _prov_name, results in by_provider.items():
+        for r in results:
+            key = r.email.lower()
+            existing = merged.get(key)
+            if existing is None or r.confidence > existing.confidence:
+                merged[key] = DomainSearchResultItem(
+                    email=r.email,
+                    confidence=r.confidence,
+                    source=r.source,
+                    name=r.name,
+                    title=r.title,
+                )
+
+    items = sorted(merged.values(), key=lambda x: x.confidence, reverse=True)
+    elapsed = (time.perf_counter() - started) * 1000
+
+    return DomainSearchResponse(
+        domain=req.domain,
+        total=len(items),
+        elapsed_ms=elapsed,
+        providers_used=list(by_provider.keys()),
+        results=items,
     )
 
 
