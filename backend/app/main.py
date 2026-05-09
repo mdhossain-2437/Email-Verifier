@@ -16,14 +16,16 @@ from __future__ import annotations
 import asyncio
 import csv
 import io
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from .extractor import extract_emails, extract_unique
@@ -353,3 +355,57 @@ async def cancel_job(job_id: str):
     if job.task and not job.task.done():
         job.task.cancel()
     return {"status": "deleted"}
+
+
+# ---------------------------------------------------------------------------
+# Optional: serve the built frontend at /, so backend + UI are same-origin.
+# ---------------------------------------------------------------------------
+
+
+def _resolve_static_dir() -> Optional[Path]:
+    override = os.environ.get("EMAIL_VERIFIER_STATIC_DIR")
+    candidates: list[Path] = []
+    if override:
+        candidates.append(Path(override))
+    here = Path(__file__).resolve().parent
+    candidates.extend(
+        [
+            here.parent / "static",
+            here.parent.parent / "frontend" / "dist",
+        ]
+    )
+    for path in candidates:
+        if path.is_dir() and (path / "index.html").exists():
+            return path
+    return None
+
+
+_STATIC_DIR = _resolve_static_dir()
+
+
+_RESERVED_PREFIXES = ("api/", "healthz", "docs", "redoc", "openapi.json")
+
+
+@app.get("/", include_in_schema=False)
+async def _ui_root():
+    if _STATIC_DIR is None:
+        raise HTTPException(status_code=404, detail="frontend not built")
+    return FileResponse(_STATIC_DIR / "index.html")
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def _ui_fallback(full_path: str):
+    """Serve the built frontend for any non-API path (SPA fallback)."""
+    if _STATIC_DIR is None or any(
+        full_path == p.rstrip("/") or full_path.startswith(p) for p in _RESERVED_PREFIXES
+    ):
+        raise HTTPException(status_code=404)
+    candidate = (_STATIC_DIR / full_path).resolve()
+    root = _STATIC_DIR.resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        raise HTTPException(status_code=404)
+    if candidate.is_file():
+        return FileResponse(candidate)
+    return FileResponse(_STATIC_DIR / "index.html")
