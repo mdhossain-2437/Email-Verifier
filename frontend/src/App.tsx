@@ -20,12 +20,16 @@ import {
   Database,
   Download,
   ExternalLink,
+  Eye,
+  EyeOff,
   Filter,
   Github,
   Globe,
   HelpCircle,
   Heart,
+  KeyRound,
   LayoutDashboard,
+  LogOut,
   Loader2,
   Mail,
   Plus,
@@ -47,6 +51,8 @@ import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import "./App.css";
 import {
   api,
+  setTokenGetter,
+  type ApiKey,
   type CleanedEmail,
   type CleanResponse,
   type DashboardSnapshot,
@@ -59,6 +65,8 @@ import {
   type Status,
   type VerifyResult,
 } from "./lib/api";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { AuthGate } from "@/components/AuthGate";
 import {
   downloadText,
   resultsToCsv,
@@ -74,6 +82,7 @@ type Tab =
   | "verify-one"
   | "tools"
   | "api"
+  | "keys"
   | "about";
 
 const STATUS_META: Record<Status, { label: string; cls: string; icon: typeof CheckCircle2 }> = {
@@ -2008,6 +2017,7 @@ const NAV: NavItem[] = [
   { key: "extract", label: "Extractor", sublabel: "Text & Files", icon: Sparkles },
   { key: "verify-one", label: "Inspector", sublabel: "Single Verify", icon: Filter },
   { key: "tools", label: "Marketplace", sublabel: "Utility Tools", icon: Store },
+  { key: "keys", label: "API Keys", sublabel: "Personal Tokens", icon: KeyRound },
   { key: "api", label: "API", sublabel: "REST Reference", icon: Code2 },
   { key: "about", label: "About", sublabel: "Credits & Limits", icon: Heart },
 ];
@@ -2017,11 +2027,15 @@ function Sidebar({
   onSelect,
   open,
   onClose,
+  user,
+  onSignOut,
 }: {
   active: Tab;
   onSelect: (k: Tab) => void;
   open: boolean;
   onClose: () => void;
+  user: { name: string; email: string | null; photoURL: string | null; initials: string };
+  onSignOut: () => void;
 }) {
   return (
     <>
@@ -2039,15 +2053,34 @@ function Sidebar({
       >
         <div className="px-5 pt-6 pb-5 border-b border-white/5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 via-sky-400 to-emerald-400 grid place-items-center text-[#0b0d18] font-semibold text-sm shadow-lg">
-              DH
-            </div>
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-white leading-tight truncate">
-                Delowar Hossain
+            {user.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt={user.name}
+                referrerPolicy="no-referrer"
+                className="w-10 h-10 rounded-full object-cover ring-1 ring-white/10"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 via-sky-400 to-emerald-400 grid place-items-center text-[#0b0d18] font-semibold text-sm shadow-lg">
+                {user.initials}
               </div>
-              <div className="text-[11px] text-indigo-300/80 leading-tight">Enterprise Plan</div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-white leading-tight truncate">
+                {user.name}
+              </div>
+              <div className="text-[11px] text-indigo-300/80 leading-tight truncate">
+                {user.email || "Signed in"}
+              </div>
             </div>
+            <button
+              onClick={onSignOut}
+              title="Sign out"
+              aria-label="sign out"
+              className="p-1.5 rounded-lg text-zinc-400 hover:bg-white/5 hover:text-white"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
           <button
             onClick={() => window.open(GITHUB_REPO, "_blank")}
@@ -2119,10 +2152,12 @@ function Topbar({
   onMenu,
   onJump,
   onNew,
+  user,
 }: {
   onMenu: () => void;
   onJump: (q: string) => void;
   onNew: () => void;
+  user: { name: string; photoURL: string | null; initials: string };
 }) {
   const [q, setQ] = useState("");
   return (
@@ -2183,9 +2218,18 @@ function Topbar({
         >
           <Settings2 className="w-4 h-4" />
         </button>
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 via-sky-400 to-emerald-400 grid place-items-center text-[#0b0d18] font-semibold text-xs ml-1">
-          DH
-        </div>
+        {user.photoURL ? (
+          <img
+            src={user.photoURL}
+            alt={user.name}
+            referrerPolicy="no-referrer"
+            className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10 ml-1"
+          />
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 via-sky-400 to-emerald-400 grid place-items-center text-[#0b0d18] font-semibold text-xs ml-1">
+            {user.initials}
+          </div>
+        )}
       </div>
     </header>
   );
@@ -3101,6 +3145,245 @@ function ToolsMarketplaceView({ onGo }: { onGo: (t: Tab) => void }) {
 }
 
 // ---------------------------------------------------------------------------
+// v5: API Keys panel — list / create-once / revoke
+// ---------------------------------------------------------------------------
+
+function ApiKeysView() {
+  const [keys, setKeys] = useState<ApiKey[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [freshKey, setFreshKey] = useState<string | null>(null);
+  const [showFresh, setShowFresh] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.keys.list();
+      setKeys(res.keys);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load keys");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const onCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setCreating(true);
+    try {
+      const res = await api.keys.create(name.trim() || "Untitled key");
+      setFreshKey(res.key);
+      setShowFresh(true);
+      setCopied(false);
+      setName("");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create key");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const onRevoke = async (id: string) => {
+    if (!confirm("Revoke this key? Any code using it will start getting 401.")) return;
+    try {
+      await api.keys.revoke(id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to revoke key");
+    }
+  };
+
+  const copyFresh = async () => {
+    if (!freshKey) return;
+    try {
+      await navigator.clipboard.writeText(freshKey);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {freshKey && (
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5 space-y-3">
+          <div className="flex items-center gap-2 text-emerald-200 font-medium">
+            <ShieldCheck className="w-4 h-4" /> New key generated
+          </div>
+          <p className="text-xs text-zinc-300">
+            This is the only time we will show this value. Copy it and store it
+            in your password manager / CI secrets now. If you lose it, just
+            revoke and create a new one.
+          </p>
+          <div className="flex items-stretch gap-2">
+            <code className="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-emerald-200 font-mono break-all select-all">
+              {showFresh ? freshKey : freshKey.slice(0, 8) + "•".repeat(Math.max(8, freshKey.length - 8))}
+            </code>
+            <button
+              type="button"
+              onClick={() => setShowFresh((s) => !s)}
+              title={showFresh ? "Hide" : "Reveal"}
+              className="px-3 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-zinc-300"
+            >
+              {showFresh ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={copyFresh}
+              className="px-3 rounded-lg border border-emerald-400/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-200 text-xs font-medium"
+            >
+              {copied ? "Copied!" : (
+                <span className="inline-flex items-center gap-1.5">
+                  <Copy className="w-3.5 h-3.5" /> Copy
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFreshKey(null)}
+              className="px-3 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-zinc-300"
+              aria-label="dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-4">
+        <div className="flex items-center gap-2 text-zinc-100 font-medium">
+          <KeyRound className="w-4 h-4 text-indigo-300" /> Generate a new key
+        </div>
+        <form onSubmit={onCreate} className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Label (e.g. CI runner, local dev, marketing-agent)"
+            maxLength={80}
+            className="flex-1 rounded-lg border border-white/10 bg-white/5 focus:bg-white/10 focus:border-indigo-400/40 outline-none text-sm px-3 py-2"
+          />
+          <button
+            type="submit"
+            disabled={creating}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 transition"
+          >
+            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Create key
+          </button>
+        </form>
+        <p className="text-[11px] text-zinc-500">
+          Keys are 256-bit random and prefixed with <code>evk_</code>. We store
+          only a SHA-256 hash + the prefix server-side, so we cannot recover
+          the secret if you lose it.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-white/5 bg-white/[0.02] overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
+          <div className="text-sm font-medium text-zinc-200">Your keys</div>
+          <button
+            onClick={() => void refresh()}
+            disabled={loading}
+            className="text-xs text-zinc-400 hover:text-zinc-200 inline-flex items-center gap-1"
+          >
+            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+            Refresh
+          </button>
+        </div>
+        {error && (
+          <div className="px-5 py-3 text-xs text-rose-200 bg-rose-500/5 border-b border-rose-500/20 flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5" /> {error}
+          </div>
+        )}
+        {loading && keys.length === 0 ? (
+          <div className="px-5 py-8 text-sm text-zinc-500 flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+          </div>
+        ) : keys.length === 0 ? (
+          <div className="px-5 py-10 text-center text-sm text-zinc-500">
+            No keys yet. Generate your first one above.
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-white/[0.02] text-zinc-400 text-[11px] uppercase tracking-wider">
+              <tr>
+                <th className="px-5 py-2 text-left font-medium">Label</th>
+                <th className="px-5 py-2 text-left font-medium">Prefix</th>
+                <th className="px-5 py-2 text-left font-medium">Created</th>
+                <th className="px-5 py-2 text-left font-medium">Last used</th>
+                <th className="px-5 py-2 text-left font-medium">Status</th>
+                <th className="px-5 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {keys.map((k) => (
+                <tr key={k.id} className="border-t border-white/5">
+                  <td className="px-5 py-3 text-zinc-200">{k.name || "Untitled"}</td>
+                  <td className="px-5 py-3 text-zinc-400 font-mono text-xs">{k.prefix}…</td>
+                  <td className="px-5 py-3 text-zinc-400 text-xs">{relativeTime(k.created_at * 1000)}</td>
+                  <td className="px-5 py-3 text-zinc-400 text-xs">
+                    {k.last_used_at ? relativeTime(k.last_used_at * 1000) : "never"}
+                  </td>
+                  <td className="px-5 py-3">
+                    {k.revoked ? (
+                      <span className="text-[11px] inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/10 text-rose-200 px-2 py-0.5">
+                        <ShieldAlert className="w-3 h-3" /> revoked
+                      </span>
+                    ) : (
+                      <span className="text-[11px] inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-200 px-2 py-0.5">
+                        <ShieldCheck className="w-3 h-3" /> active
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    {!k.revoked && (
+                      <button
+                        onClick={() => void onRevoke(k.id)}
+                        title="Revoke this key"
+                        className="text-rose-300 hover:text-rose-200 inline-flex items-center gap-1 text-xs"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Revoke
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-2 text-xs text-zinc-400">
+        <div className="text-sm font-medium text-zinc-200 mb-1">Using your key</div>
+        <pre className="rounded-lg border border-white/10 bg-black/40 p-3 overflow-x-auto text-[11px] text-zinc-300">
+{`curl -X POST $API_BASE/api/verify \\
+  -H "Authorization: Bearer evk_••••••••" \\
+  -H "Content-Type: application/json" \\
+  -d '{"email":"hello@example.com"}'`}
+        </pre>
+        <p>
+          Browser sessions use a Firebase ID token automatically. Programmatic
+          access (CI, scripts, agents) uses your <code>evk_…</code> key with
+          the same <code>Authorization: Bearer</code> header.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // v3: App shell (sidebar + topbar + content + footer)
 // ---------------------------------------------------------------------------
 
@@ -3111,15 +3394,32 @@ const PAGE_TITLES: Record<Tab, string> = {
   extract: "Email Extractor · Delowar's Email Verifier",
   "verify-one": "Single Inspector · Delowar's Email Verifier",
   tools: "Tools Marketplace · Delowar's Email Verifier",
+  keys: "API Keys · Delowar's Email Verifier",
   api: "REST API · Delowar's Email Verifier",
   about: "About · Delowar's Email Verifier",
 };
 
 export default function App() {
+  return (
+    <AuthProvider>
+      <AuthGate>
+        <AppShell />
+      </AuthGate>
+    </AuthProvider>
+  );
+}
+
+function AppShell() {
+  const { user, getIdToken, signOutUser } = useAuth();
   const [tab, setTab] = useState<Tab>("command-center");
   const [bulkSeed, setBulkSeed] = useState<string[]>([]);
   const [meta, setMeta] = useState<ServerMeta | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    setTokenGetter(() => getIdToken());
+    return () => setTokenGetter(null);
+  }, [getIdToken]);
 
   useEffect(() => {
     api.meta().then(setMeta).catch(() => undefined);
@@ -3128,6 +3428,22 @@ export default function App() {
   useEffect(() => {
     document.title = PAGE_TITLES[tab];
   }, [tab]);
+
+  const userInfo = useMemo(() => {
+    const name = user?.displayName || user?.email?.split("@")[0] || "User";
+    const initials = name
+      .split(/\s+|[._-]/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((s) => s[0]?.toUpperCase() || "")
+      .join("") || "U";
+    return {
+      name,
+      email: user?.email ?? null,
+      photoURL: user?.photoURL ?? null,
+      initials,
+    };
+  }, [user]);
 
   const titles: Record<Tab, { title: string; subtitle: string }> = {
     "command-center": { title: "Command Center", subtitle: "" },
@@ -3148,6 +3464,11 @@ export default function App() {
         "Drill into one address: syntax, MX records, country, role, disposable, and (optionally) live SMTP.",
     },
     tools: { title: "Tools Marketplace", subtitle: "" },
+    keys: {
+      title: "API Keys",
+      subtitle:
+        "Personal tokens for calling /api/* from your own code. Each key is shown ONCE at create time — store it somewhere safe immediately.",
+    },
     api: {
       title: "REST API Reference",
       subtitle:
@@ -3168,6 +3489,10 @@ export default function App() {
           onSelect={setTab}
           open={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
+          user={userInfo}
+          onSignOut={() => {
+            void signOutUser();
+          }}
         />
 
         <div className="flex-1 min-w-0 flex flex-col min-h-screen">
@@ -3175,6 +3500,7 @@ export default function App() {
             onMenu={() => setSidebarOpen(true)}
             onJump={() => setTab("verify-bulk")}
             onNew={() => setTab("verify-bulk")}
+            user={userInfo}
           />
 
           <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-[1400px] w-full mx-auto">
@@ -3216,6 +3542,12 @@ export default function App() {
               </div>
             )}
             {tab === "tools" && <ToolsMarketplaceView onGo={setTab} />}
+            {tab === "keys" && (
+              <div className="space-y-6">
+                <PageHeader title={titles[tab].title} subtitle={titles[tab].subtitle} />
+                <ApiKeysView />
+              </div>
+            )}
             {tab === "api" && (
               <div className="space-y-6">
                 <PageHeader title={titles[tab].title} subtitle={titles[tab].subtitle} />

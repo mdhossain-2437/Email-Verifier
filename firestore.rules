@@ -1,0 +1,47 @@
+// Firestore Security Rules for the Email Verifier app.
+//
+// The backend (firebase-admin) talks to Firestore using a service account
+// and BYPASSES these rules entirely — that's intentional, the backend is
+// where we run our own server-side authorization checks.
+//
+// These rules exist to lock down DIRECT browser-to-Firestore reads and
+// writes so a malicious page can't read another user's profile or
+// rotate someone else's API key.
+//
+// Default posture: deny everything, then allow exactly the per-user paths
+// the app actually uses.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // users/{uid} — profile document. Only the owning UID may read or
+    // write its own document; every field rewrite goes through the
+    // backend, but we still allow direct read so the frontend can hydrate
+    // its sidebar/avatar without an extra hop. The backend uses the
+    // Admin SDK and bypasses these rules.
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false; // writes only via backend (Admin SDK)
+
+      // users/{uid}/api_keys/{keyId} — never readable from the browser.
+      // The /api/keys endpoints surface the public-safe view of these
+      // documents (no hashes, no raw secrets).
+      match /api_keys/{keyId} {
+        allow read, write: if false;
+      }
+    }
+
+    // api_key_index/{hash} — internal lookup table used by the backend
+    // to resolve raw evk_... tokens into records without scanning every
+    // user subcollection. Never exposed to the browser.
+    match /api_key_index/{hash} {
+      allow read, write: if false;
+    }
+
+    // Catch-all: deny anything we haven't explicitly opened up above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
