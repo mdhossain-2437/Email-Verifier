@@ -1,9 +1,11 @@
 import {
+  Component,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type ErrorInfo,
   type ReactNode,
 } from "react";
 import {
@@ -239,6 +241,63 @@ function Toggle({
 
 function Spinner({ className = "w-4 h-4" }: { className?: string }) {
   return <Loader2 className={`animate-spin ${className}`} />;
+}
+
+interface ErrorBoundaryState {
+  error: Error | null;
+}
+
+class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    if (typeof console !== "undefined") {
+      console.error("[Email Verifier] uncaught render error", error, info);
+    }
+  }
+
+  handleReset = () => this.setState({ error: null });
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6 py-12 bg-[#0b0d18] text-zinc-100">
+        <div className="max-w-md rounded-2xl border border-rose-500/30 bg-rose-500/5 p-6 space-y-4">
+          <div className="flex items-center gap-2 text-rose-200 font-semibold">
+            <AlertTriangle className="w-5 h-5" /> Something broke in the UI
+          </div>
+          <p className="text-sm text-zinc-300">
+            One panel crashed but the API and the rest of the app are still healthy. Try the action
+            again — your jobs and data are not lost.
+          </p>
+          <pre className="text-[11px] leading-snug text-rose-200/80 bg-black/30 rounded p-3 max-h-40 overflow-auto whitespace-pre-wrap">
+            {this.state.error.message}
+          </pre>
+          <div className="flex gap-2">
+            <button
+              onClick={this.handleReset}
+              className="rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium px-3 py-2"
+            >
+              Reload panel
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="rounded-lg border border-white/10 hover:bg-white/5 text-zinc-200 text-sm px-3 py-2"
+            >
+              Hard refresh
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 }
 
 interface BulkFilters {
@@ -2236,13 +2295,19 @@ function CommandCenterView({
 }) {
   const [snap, setSnap] = useState<DashboardSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
     let stop = false;
     const tick = async () => {
       try {
         const s = await api.dashboard();
-        if (!stop) setSnap(s);
+        if (!stop) {
+          setSnap(s);
+          setLastUpdated(Date.now());
+          setError(null);
+        }
       } catch (e) {
         if (!stop) setError(e instanceof Error ? e.message : String(e));
       }
@@ -2253,7 +2318,7 @@ function CommandCenterView({
       stop = true;
       clearInterval(id);
     };
-  }, []);
+  }, [refreshTick]);
 
   const volumeData = useMemo(() => {
     const buckets = snap?.volume_7d ?? [0, 0, 0, 0, 0, 0, 0];
@@ -2272,9 +2337,21 @@ function CommandCenterView({
         title="Command Center"
         subtitle="Real-time overview of your verification ecosystem. Numbers below come from /api/dashboard — they reflect actual jobs run on this server, not demo data."
         cta={
-          <PrimaryButton icon={Plus} onClick={onNewJob}>
-            New Job
-          </PrimaryButton>
+          <div className="flex items-center gap-2">
+            {lastUpdated && (
+              <button
+                onClick={() => setRefreshTick((n) => n + 1)}
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-white/5 bg-white/[0.03] hover:bg-white/[0.06] text-[11px] text-zinc-400 px-2.5 py-1.5"
+                title="Refresh now"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-soft" />
+                Updated {relativeTime(lastUpdated / 1000)}
+              </button>
+            )}
+            <PrimaryButton icon={Plus} onClick={onNewJob}>
+              New Job
+            </PrimaryButton>
+          </div>
         }
       />
 
@@ -2595,6 +2672,22 @@ function LeadFinderView() {
     downloadText("lead-finder-results.csv", rows.join("\n"));
   };
 
+  const exportJson = () => {
+    if (results.length === 0) return;
+    downloadText(
+      "lead-finder-results.json",
+      JSON.stringify({ count: results.length, elapsed_ms: elapsed, results }, null, 2),
+    );
+  };
+
+  const exportTxt = () => {
+    if (results.length === 0) return;
+    const lines = results
+      .filter((r) => r.best_email)
+      .map((r) => r.best_email!);
+    downloadText("lead-finder-results.txt", lines.join("\n") + "\n");
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -2688,9 +2781,15 @@ function LeadFinderView() {
                 {elapsed !== null && ` · ${(elapsed / 1000).toFixed(2)}s`}
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <GhostButton onClick={exportCsv} icon={Download}>
-                Export CSV
+                CSV
+              </GhostButton>
+              <GhostButton onClick={exportJson} icon={Download}>
+                JSON
+              </GhostButton>
+              <GhostButton onClick={exportTxt} icon={Download}>
+                TXT
               </GhostButton>
             </div>
           </div>
@@ -3005,6 +3104,17 @@ function ToolsMarketplaceView({ onGo }: { onGo: (t: Tab) => void }) {
 // v3: App shell (sidebar + topbar + content + footer)
 // ---------------------------------------------------------------------------
 
+const PAGE_TITLES: Record<Tab, string> = {
+  "command-center": "Command Center · Delowar's Email Verifier",
+  "verify-bulk": "Mass Processing · Delowar's Email Verifier",
+  "lead-finder": "Lead Finder · Delowar's Email Verifier",
+  extract: "Email Extractor · Delowar's Email Verifier",
+  "verify-one": "Single Inspector · Delowar's Email Verifier",
+  tools: "Tools Marketplace · Delowar's Email Verifier",
+  api: "REST API · Delowar's Email Verifier",
+  about: "About · Delowar's Email Verifier",
+};
+
 export default function App() {
   const [tab, setTab] = useState<Tab>("command-center");
   const [bulkSeed, setBulkSeed] = useState<string[]>([]);
@@ -3014,6 +3124,10 @@ export default function App() {
   useEffect(() => {
     api.meta().then(setMeta).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    document.title = PAGE_TITLES[tab];
+  }, [tab]);
 
   const titles: Record<Tab, { title: string; subtitle: string }> = {
     "command-center": { title: "Command Center", subtitle: "" },
@@ -3043,6 +3157,7 @@ export default function App() {
   };
 
   return (
+    <ErrorBoundary>
     <div className="relative min-h-screen text-zinc-100">
       <div className="absolute inset-0 bg-grid pointer-events-none" />
       <div className="absolute inset-0 bg-glow pointer-events-none" />
@@ -3152,5 +3267,6 @@ export default function App() {
         </div>
       </div>
     </div>
+    </ErrorBoundary>
   );
 }

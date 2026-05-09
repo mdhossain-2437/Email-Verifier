@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /docs
+Disallow: /openapi.json
+
+# Email Verifier — open source, ToS-respecting tool.
+# Scraping is intentionally absent; this app verifies addresses
+# you supply, it does not collect them from the public web.

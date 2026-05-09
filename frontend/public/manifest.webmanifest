@@ -1,0 +1,26 @@
+{
+  "name": "Delowar's Email Verifier",
+  "short_name": "Email Verifier",
+  "description": "Extract, validate, and de-risk email addresses at scale. Multi-format ingest, DNS + SMTP verification, country/provider classification, bulk processing up to 100k per job, and a BYOL Lead Finder.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b0d18",
+  "theme_color": "#0b0d18",
+  "orientation": "any",
+  "categories": ["productivity", "business", "developer"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "maskable"
+    }
+  ]
+}

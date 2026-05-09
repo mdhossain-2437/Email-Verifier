@@ -2,12 +2,93 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0d18" />
+    <meta name="color-scheme" content="dark" />
+
+    <!-- Primary meta -->
+    <title>Delowar's Email Verifier - Extract, Validate, and De-risk Emails at Scale</title>
+    <meta
+      name="description"
+      content="Free, open-source email verifier and bulk extractor. Multi-format ingest (CSV / XLSX / EML / mbox), DNS + SMTP verification, country &amp; provider tagging, BYOL Lead Finder, and bulk processing up to 100,000 addresses per job."
+    />
+    <meta name="application-name" content="Delowar's Email Verifier" />
+    <meta name="author" content="Delowar Hossain" />
+    <meta
+      name="keywords"
+      content="email verifier, email validator, bulk email verification, smtp probe, mx record check, email extractor, lead finder, deliverability, free email verifier, open source"
+    />
+    <link rel="canonical" href="/" />
+
+    <!-- Icons / PWA -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="mask-icon" href="/favicon.svg" color="#6366f1" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Inter font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Delowar's Email Verifier" />
+    <meta property="og:title" content="Delowar's Email Verifier - Extract, Validate, and De-risk Emails at Scale" />
+    <meta
+      property="og:description"
+      content="Free, open-source email verifier and bulk extractor. Multi-format ingest, DNS + SMTP verification, country &amp; provider tagging, BYOL Lead Finder, and bulk processing up to 100k addresses per job."
+    />
+    <meta property="og:url" content="/" />
+    <meta property="og:image" content="/og-image.svg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Delowar's Email Verifier - find every email, then prove it's real." />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Delowar's Email Verifier" />
+    <meta
+      name="twitter:description"
+      content="Free, open-source email verifier and bulk extractor. Multi-format ingest, DNS + SMTP verification, BYOL Lead Finder."
+    />
+    <meta name="twitter:image" content="/og-image.svg" />
+
+    <meta
+      name="robots"
+      content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+    />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Delowar's Email Verifier",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Any",
+        "description": "Open-source web app for extracting, validating, and de-risking email addresses at scale. Multi-format ingest, DNS + SMTP probing, BYOL Lead Finder.",
+        "author": {
+          "@type": "Person",
+          "name": "Delowar Hossain",
+          "url": "https://delowarhossain.dev",
+          "sameAs": ["https://github.com/mdhossain-2437"]
+        },
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="padding:24px;color:#e6e7eb;background:#0b0d18;font-family:system-ui,sans-serif">
+        <h1>Delowar's Email Verifier</h1>
+        <p>This app needs JavaScript enabled to run. The same engine is also exposed as a REST API at <a href="/docs" style="color:#a5b4fc">/docs</a>.</p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

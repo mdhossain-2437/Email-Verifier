@@ -286,6 +286,21 @@ async def healthz():
     return {"status": "ok"}
 
 
+@app.get("/api/version")
+async def version_endpoint():
+    """Surface server-side version + build metadata so the UI can pin
+    feature behavior to a known backend without parsing /openapi.json."""
+    return {
+        "name": "email-verifier",
+        "version": app.version,
+        "git_sha": os.environ.get("EMAIL_VERIFIER_GIT_SHA") or None,
+        "build_time": os.environ.get("EMAIL_VERIFIER_BUILD_TIME") or None,
+        "max_upload_bytes": MAX_UPLOAD_BYTES,
+        "max_job_inputs": MAX_JOB_INPUTS,
+        "max_bulk_sync": MAX_BULK_SYNC,
+    }
+
+
 @app.get("/api/meta")
 async def meta_endpoint():
     """Surface feature/limits to the frontend so the UI can introspect
