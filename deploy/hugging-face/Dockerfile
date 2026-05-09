@@ -28,8 +28,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# HF Spaces requires a non-root user with UID 1000 for write permissions
-# on /data (persistent storage) and the working dir.
+# Install Poetry + project deps as root so they land in the system
+# site-packages with the right permissions. We switch to the non-root
+# `user` AFTER deps are installed (HF Spaces convention; see
+# https://huggingface.co/docs/hub/spaces-sdks-docker#permissions).
+RUN pip install "poetry==${POETRY_VERSION}"
+
+COPY backend/pyproject.toml backend/poetry.lock* ./backend/
+RUN cd backend && poetry install --only main --no-root --no-ansi
+
+# Create the non-root user HF expects; it owns the runtime files only.
 RUN useradd -m -u 1000 user
 USER user
 ENV HOME=/home/user \
@@ -37,15 +45,9 @@ ENV HOME=/home/user \
 
 WORKDIR /home/user/app
 
-# Install Poetry into the user's home (HF can't write to /usr/local).
-RUN pip install --user "poetry==${POETRY_VERSION}"
-
-# Lockfile-only first for layer caching.
-COPY --chown=user:user backend/pyproject.toml backend/poetry.lock* ./backend/
-RUN cd backend && poetry install --only main --no-root --no-ansi
-
-COPY --chown=user:user backend/app ./backend/app
-COPY --chown=user:user backend/README.md ./backend/
+# Copy source as the non-root user so file ownership matches.
+COPY --chown=user:user backend/app /home/user/app/backend/app
+COPY --chown=user:user backend/README.md /home/user/app/backend/
 
 WORKDIR /home/user/app/backend
 
