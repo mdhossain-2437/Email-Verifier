@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  X,
 } from "lucide-react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 
@@ -22,6 +23,7 @@ import {
   api,
   tryPrimary,
   type DashboardSnapshot,
+  type JobStatus,
   type ServerMeta,
   type Status,
 } from "@/lib/api";
@@ -95,27 +97,67 @@ export function CommandCenterView({
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const [retrying, setRetrying] = useState(false);
+  // Lazy-fetched job-detail report (opens in a modal when a row is clicked).
+  const [openJobId, setOpenJobId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!dashboardAvailable) return undefined;
+    // Lazy-fetch strategy (enterprise-grade, minimal backend load):
+    //   1. Fetch once on mount / manual refresh / tab-becomes-visible.
+    //   2. Only set up a recurring poll while there are ACTIVE jobs
+    //      (snap.active_jobs > 0). Otherwise the dashboard is static —
+    //      no point hammering /api/dashboard every 5 seconds.
+    //   3. Active-job poll cadence backs off: starts at 4s, slows to
+    //      10s after 1 min, 20s after 5 min.
     let stop = false;
+    let activeJobsLocal = 0;
+    let pollCount = 0;
+    let timer: number | undefined;
+
+    const cadenceMs = (n: number): number => {
+      if (n < 15) return 4_000;
+      if (n < 75) return 10_000;
+      return 20_000;
+    };
+
     const tick = async () => {
       try {
         const s = await api.dashboard();
-        if (!stop) {
-          setSnap(s);
-          setLastUpdated(Date.now());
-          setError(null);
-        }
+        if (stop) return;
+        setSnap(s);
+        setLastUpdated(Date.now());
+        setError(null);
+        activeJobsLocal = s.active_jobs ?? 0;
       } catch (e) {
         if (!stop) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (stop) return;
+        // Schedule next poll only if there are active jobs.
+        if (activeJobsLocal > 0) {
+          pollCount += 1;
+          timer = window.setTimeout(tick, cadenceMs(pollCount));
+        } else {
+          timer = undefined;
+          pollCount = 0;
+        }
       }
     };
+
+    // Initial fetch.
     tick();
-    const id = setInterval(tick, 5000);
+
+    // Re-fetch when the tab becomes visible (user switched back).
+    const onVisibility = () => {
+      if (document.visibilityState === "visible" && !timer) {
+        tick();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
       stop = true;
-      clearInterval(id);
+      if (timer) window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [refreshTick, dashboardAvailable]);
 
@@ -345,8 +387,18 @@ export function CommandCenterView({
                           : j.status === "error"
                             ? "Errored"
                             : "—";
+                  const clickable = j.status === "done" || j.status === "error";
                   return (
-                    <tr key={j.job_id} className="hover:bg-white/[0.02]">
+                    <tr
+                      key={j.job_id}
+                      onClick={clickable ? () => setOpenJobId(j.job_id) : undefined}
+                      className={
+                        clickable
+                          ? "hover:bg-white/[0.04] cursor-pointer"
+                          : "hover:bg-white/[0.02]"
+                      }
+                      title={clickable ? "Click to view full report" : undefined}
+                    >
                       <td className="px-3 py-2.5 font-mono text-zinc-200">{jobLabel(j.job_id)}</td>
                       <td className="px-3 py-2.5 tabular-nums text-zinc-300">
                         {j.total.toLocaleString()}
@@ -359,7 +411,8 @@ export function CommandCenterView({
                         {j.status === "done" ? (
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               void api
                                 .downloadJobResults(j.job_id, "csv")
                                 .catch(() => undefined);
@@ -379,6 +432,193 @@ export function CommandCenterView({
             </table>
           </div>
         )}
+      </div>
+
+      {openJobId && (
+        <JobReportModal jobId={openJobId} onClose={() => setOpenJobId(null)} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Lazy-fetched job report modal. Opened on row-click in Recent Jobs.
+ *
+ * Design: this is the ONLY entry point that fetches the full result rows;
+ * the dashboard endpoint deliberately keeps `recent_jobs` lightweight.
+ * Network spend is paid only when the user asks for the detail view.
+ */
+function JobReportModal({ jobId, onClose }: { jobId: string; onClose: () => void }) {
+  const [job, setJob] = useState<JobStatus | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setErr(null);
+    api
+      .jobStatus(jobId, true)
+      .then((j) => {
+        if (cancelled) return;
+        setJob(j);
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setErr(e instanceof Error ? e.message : String(e));
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId]);
+
+  // Close on ESC.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const previewRows = useMemo(() => (job?.results ?? []).slice(0, 50), [job]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
+          <div>
+            <div className="text-sm font-semibold text-white">Job Report</div>
+            <div className="text-xs text-zinc-500 font-mono mt-0.5">{jobId}</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1.5 text-zinc-400 hover:text-white hover:bg-white/5"
+            title="Close (Esc)"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {loading && (
+            <div className="text-sm text-zinc-500 py-10 text-center">Loading job report…</div>
+          )}
+
+          {err && (
+            <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+              Failed to load job: {err}
+            </div>
+          )}
+
+          {job && !loading && !err && (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                  <div className="text-[10px] uppercase tracking-wider text-zinc-500">Total</div>
+                  <div className="text-xl text-white tabular-nums mt-1">
+                    {job.total.toLocaleString()}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                  <div className="text-[10px] uppercase tracking-wider text-emerald-300">Valid</div>
+                  <div className="text-xl text-emerald-200 tabular-nums mt-1">
+                    {job.summary.valid.toLocaleString()}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
+                  <div className="text-[10px] uppercase tracking-wider text-rose-300">Invalid</div>
+                  <div className="text-xl text-rose-200 tabular-nums mt-1">
+                    {job.summary.invalid.toLocaleString()}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                  <div className="text-[10px] uppercase tracking-wider text-amber-300">Risky</div>
+                  <div className="text-xl text-amber-200 tabular-nums mt-1">
+                    {job.summary.risky.toLocaleString()}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-zinc-500/20 bg-zinc-500/5 p-3">
+                  <div className="text-[10px] uppercase tracking-wider text-zinc-400">Unknown</div>
+                  <div className="text-xl text-zinc-200 tabular-nums mt-1">
+                    {job.summary.unknown.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+
+              {job.error && (
+                <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+                  {job.error}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-zinc-500">
+                  Showing first {previewRows.length} of {job.results?.length ?? 0} rows
+                </div>
+                {job.status === "done" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void api.downloadJobResults(jobId, "csv").catch(() => undefined);
+                    }}
+                    className="text-xs rounded-md border border-indigo-400/30 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-200 px-2.5 py-1.5"
+                  >
+                    Download full CSV
+                  </button>
+                )}
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-white/5">
+                <table className="w-full text-sm">
+                  <thead className="bg-white/[0.02] text-[11px] uppercase tracking-wider text-zinc-500">
+                    <tr className="text-left">
+                      <th className="px-3 py-2 font-medium">Email</th>
+                      <th className="px-3 py-2 font-medium">Status</th>
+                      <th className="px-3 py-2 font-medium">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {previewRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="px-3 py-6 text-center text-zinc-500">
+                          No rows.
+                        </td>
+                      </tr>
+                    ) : (
+                      previewRows.map((r, i) => (
+                        <tr key={`${r.email}-${i}`} className="hover:bg-white/[0.02]">
+                          <td className="px-3 py-2 font-mono text-xs text-zinc-200">{r.email}</td>
+                          <td className="px-3 py-2">
+                            <div className="inline-flex items-center gap-2 text-xs">
+                              <StatusDot status={r.status} />
+                              <span className="text-zinc-300 capitalize">{r.status}</span>
+                            </div>
+                          </td>
+                          <td
+                            className="px-3 py-2 text-xs text-zinc-400 truncate max-w-[280px]"
+                            title={r.reason ?? ""}
+                          >
+                            {r.reason ?? "-"}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
