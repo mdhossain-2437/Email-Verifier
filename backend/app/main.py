@@ -36,7 +36,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import api_keys, auth, profiles
+from . import api_keys, auth, jobs_persistence, profiles
 from .auth import get_current_user, resolve_authorization
 from .disposable import is_disposable, is_role
 from .extractor import extract_emails, extract_unique
@@ -111,7 +111,7 @@ app.add_middleware(
 
 
 MAX_BULK_SYNC = 200  # cap for /api/verify-bulk to keep response under HTTP timeouts
-MAX_JOB_INPUTS = 100_000
+MAX_JOB_INPUTS = 500_000  # bumped from 100k as part of Million-scale Phase A
 # Smaller cap when running in fallback mode (e.g. on Vercel where serverless
 # functions time out at 60s). The frontend exposes this in the degraded-mode
 # banner so users understand why their massive list got rejected when the
@@ -513,6 +513,24 @@ def _warn_if_multi_worker() -> None:
 _warn_if_multi_worker()
 
 
+@app.on_event("startup")
+async def _on_startup_mark_interrupted_jobs() -> None:
+    """Flag any jobs that were mid-flight when the backend last
+    restarted. They show up in the dashboard as ``interrupted`` so the
+    user can re-submit instead of seeing a stale ``running`` forever.
+    """
+    try:
+        count = jobs_persistence.mark_interrupted_on_startup()
+        if count:
+            import logging
+
+            logging.getLogger(__name__).info(
+                "Marked %d in-flight jobs as interrupted on startup", count
+            )
+    except Exception:  # noqa: BLE001 - never let this block startup
+        pass
+
+
 def _summarize(results: list[VerificationResult]) -> dict[str, int]:
     summary = {"valid": 0, "invalid": 0, "risky": 0, "unknown": 0}
     for r in results:
@@ -887,9 +905,11 @@ async def _run_job(
     check_mx: bool,
     check_smtp: bool,
     concurrency: int,
+    uid: Optional[str] = None,
 ):
     job.status = "running"
     job.started_at = time.time()
+    jobs_persistence.save_job(job, uid=uid)
     sem = asyncio.Semaphore(concurrency)
 
     async def _one(addr: str):
@@ -898,6 +918,7 @@ async def _run_job(
             job.processed += 1
             job.summary[res.status] = job.summary.get(res.status, 0) + 1
             job.results.append(res.to_dict())
+            jobs_persistence.maybe_save_progress(job, uid=uid)
 
     try:
         await asyncio.gather(*(_one(a) for a in emails))
@@ -907,6 +928,7 @@ async def _run_job(
         job.error = str(exc)
     finally:
         job.finished_at = time.time()
+        jobs_persistence.save_job(job, uid=uid)
 
 
 def _normalise_for_job(req: JobSubmitRequest, raw_emails: list[str]) -> list[str]:
@@ -943,7 +965,7 @@ def _normalise_for_job(req: JobSubmitRequest, raw_emails: list[str]) -> list[str
 
 
 @app.post("/api/jobs", response_model=JobStatusResponse)
-async def submit_job(req: JobSubmitRequest):
+async def submit_job(req: JobSubmitRequest, request: Request = None):  # type: ignore[assignment]
     if not req.emails and not req.text:
         raise HTTPException(status_code=400, detail="provide either 'emails' or 'text'")
 
@@ -958,8 +980,15 @@ async def submit_job(req: JobSubmitRequest):
             detail=f"max {MAX_JOB_INPUTS} emails per job - split your input",
         )
 
+    uid: Optional[str] = None
+    if request is not None:
+        user = getattr(request.state, "user", None)
+        if user is not None:
+            uid = getattr(user, "uid", None)
+
     job = Job(id=uuid.uuid4().hex, total=len(emails))
     _JOBS[job.id] = job
+    jobs_persistence.save_job(job, uid=uid)
     job.task = asyncio.create_task(
         _run_job(
             job,
@@ -967,6 +996,7 @@ async def submit_job(req: JobSubmitRequest):
             check_mx=req.check_mx,
             check_smtp=req.check_smtp,
             concurrency=req.concurrency,
+            uid=uid,
         )
     )
     return _job_to_status(job, include_results=False)
@@ -974,6 +1004,7 @@ async def submit_job(req: JobSubmitRequest):
 
 @app.post("/api/jobs/upload", response_model=JobStatusResponse)
 async def submit_job_upload(
+    request: Request,
     file: UploadFile = File(...),
     check_mx: bool = Form(True),
     check_smtp: bool = Form(False),
@@ -1009,7 +1040,7 @@ async def submit_job_upload(
         drop_disposable=drop_disposable,
         drop_role=drop_role,
     )
-    return await submit_job(req)
+    return await submit_job(req, request=request)
 
 
 def _job_to_status(job: Job, *, include_results: bool) -> JobStatusResponse:
@@ -1024,6 +1055,36 @@ def _job_to_status(job: Job, *, include_results: bool) -> JobStatusResponse:
         error=job.error,
         results=job.results if include_results and job.status == "done" else None,
     )
+
+
+@app.get("/api/jobs")
+async def list_jobs_endpoint(request: Request, limit: int = 50):
+    """Return the caller's recent jobs from Firestore. Survives backend
+    restarts unlike the in-memory ``_JOBS`` registry. Useful for the
+    dashboard's history pane.
+
+    Falls back to in-memory listing if Firestore is unavailable.
+    """
+    user = getattr(request.state, "user", None)
+    uid = getattr(user, "uid", None) if user is not None else None
+    limit = max(1, min(limit, 200))
+    persisted = jobs_persistence.list_jobs(uid=uid, limit=limit)
+    if persisted:
+        return {"jobs": persisted, "source": "firestore"}
+    in_memory = [
+        {
+            "id": j.id,
+            "status": j.status,
+            "total": j.total,
+            "processed": j.processed,
+            "summary": dict(j.summary),
+            "started_at": j.started_at,
+            "finished_at": j.finished_at,
+            "error": j.error,
+        }
+        for j in list(_JOBS.values())[-limit:]
+    ]
+    return {"jobs": in_memory, "source": "memory"}
 
 
 @app.get("/api/jobs/{job_id}", response_model=JobStatusResponse)
