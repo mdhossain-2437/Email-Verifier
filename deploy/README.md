@@ -8,7 +8,7 @@ dashboard, SMTP probe, …) are surfaced in the UI so users always know what
 they can and can't do right now.
 
 This directory contains one or more deploy recipes per tier — pick the
-host(s) that fit your situation. Multiple tier-3 recipes are provided
+host(s) that fit your situation. Multiple fallback recipes are provided
 because **redundant fallbacks across different providers** is the
 whole point of the load balancer:
 
@@ -18,23 +18,24 @@ whole point of the load balancer:
 | 1    | [`azure/`](./azure/) (Oracle Always-Free)  | Oracle Cloud ARM (24 GB RAM)     | **Free** | Yes | No          | Yes        |
 | 2    | [`fly/`](./fly/)                           | Fly.io free                      | Free  | Yes   | No          | Yes        |
 | 3    | [`hugging-face/`](./hugging-face/) ★       | Hugging Face Spaces (Docker)     | Free  | Yes   | No          | Yes (public) |
-| 3    | [`render/`](./render/) ★                   | Render free web service          | Free  | Yes   | ~30s        | No (sleeps after 15 min) |
-| 4    | [`vercel-fallback/`](./vercel-fallback/)   | Vercel serverless                | Free  | **No** | ~1s         | Yes (cold-start ~1s) |
+| 4    | [`render/`](./render/) ★                   | Render free web service          | Free  | Yes   | ~30s        | No (sleeps after 15 min) |
+| 5    | [`vercel-fallback/`](./vercel-fallback/)   | Vercel serverless                | Free  | **No** | ~1s         | Yes (cold-start ~1s) |
 | —    | [`koyeb/`](./koyeb/) ⚠️                    | Koyeb (paid only since 2024)     | **Paid** ($29/mo+) | Yes | No          | Yes        |
 
-★ = recommended free tier-3 hosts. Pick at least one — HF Spaces is
-fully always-on (free Basic CPU plan, 16 GB RAM, public-only) and
-Render is cold-start (free, sleeps after 15 min idle, ~30s to wake).
-You can run both for extra redundancy since the frontend's load
-balancer happily probes any number of URLs. All tier-3 recipes are
-full-feature (bulk jobs, dashboard, SMTP probe opt-in) — they only
-differ in cold-start behaviour and provider risk.
+★ = recommended free tier-3/4 hosts. Tier 3 (HF Spaces) is fully
+always-on (free Basic CPU plan, 16 GB RAM, public-only). Tier 4
+(Render) is cold-start (free, sleeps after 15 min idle, ~30s to
+wake). Running both is the recommended setup for redundancy — the
+frontend's load balancer probes any number of URLs and routes to
+the highest-priority healthy one. Both recipes are full-feature
+(bulk jobs, dashboard, SMTP probe opt-in) — they only differ in
+cold-start behaviour and provider risk.
 
 ⚠️ **Koyeb killed their free tier** in 2024 (their pricing page now
 starts at $29/mo Pro plan). The `deploy/koyeb/` recipe still works
 for *paid* Koyeb deploys but is no longer a free option. Keep it
-around if you have a Koyeb account; otherwise prefer HF Spaces +
-Render for free tier-3 redundancy.
+around if you have a Koyeb account; otherwise prefer HF Spaces (tier 3)
++ Render (tier 4) for free fallback redundancy.
 
 ### Long-term primary (Azure VPS replacement)
 
@@ -72,8 +73,9 @@ longer are):
 |-----:|------------------------------------------------|-------------------------|
 | 1    | (none — primary is healthy)                    | none                    |
 | 2    | Blue "Running on backup server"                | none                    |
-| 3    | Amber "Backup server warming up"               | none (just slower)      |
-| 4    | Orange "Single-verify mode"                    | Bulk, Lead Finder, Dash |
+| 3    | Blue "Running on backup server"                | none                    |
+| 4    | Amber "Backup server warming up"               | none (just slower)      |
+| 5    | Orange "Single-verify mode"                    | Bulk, Lead Finder, Dash |
 | —    | Red "All backends unreachable"                 | everything              |
 
 ## Wiring it up
