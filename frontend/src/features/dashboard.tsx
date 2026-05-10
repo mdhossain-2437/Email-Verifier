@@ -130,16 +130,15 @@ export function CommandCenterView({
         activeJobsLocal = s.active_jobs ?? 0;
       } catch (e) {
         if (!stop) setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (stop) return;
-        // Schedule next poll only if there are active jobs.
-        if (activeJobsLocal > 0) {
-          pollCount += 1;
-          timer = window.setTimeout(tick, cadenceMs(pollCount));
-        } else {
-          timer = undefined;
-          pollCount = 0;
-        }
+      }
+      if (stop) return;
+      // Schedule next poll only if there are active jobs.
+      if (activeJobsLocal > 0) {
+        pollCount += 1;
+        timer = window.setTimeout(tick, cadenceMs(pollCount));
+      } else {
+        timer = undefined;
+        pollCount = 0;
       }
     };
 
