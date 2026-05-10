@@ -151,6 +151,84 @@ def test_alice_can_see_her_own_job(client: TestClient):
     assert dash.json()["total_verified"] == 3
 
 
+# ---------------------------------------------------------------------------
+# Multi-machine fallback: _JOBS empty (e.g. POST landed on a different Fly
+# machine) but Firestore has the job. _require_owned_job must consult
+# Firestore before 404'ing, AND must still enforce the uid check on the
+# recovered doc so privacy isolation is preserved across machines.
+# ---------------------------------------------------------------------------
+
+
+def _alice_firestore_doc(job_id: str = "alice-job-cross-machine") -> dict:
+    """Shape of a Job doc as persisted by jobs_persistence._job_to_doc.
+    Notably, no per-row ``results`` array — that lives only in the
+    machine that ran the verifier (Firestore's 1 MB cap)."""
+    now = time.time()
+    return {
+        "id": job_id,
+        "uid": "alice",
+        "status": "done",
+        "total": 3,
+        "processed": 3,
+        "summary": {"valid": 3, "invalid": 0, "risky": 0, "unknown": 0},
+        "started_at": now - 5,
+        "finished_at": now,
+        "error": None,
+        "updated_at": now,
+    }
+
+
+def test_alice_status_poll_hits_firestore_when_jobs_empty(client, monkeypatch):
+    """Simulate: Alice's POST landed on machine A, her status poll
+    landed on machine B. Machine B's _JOBS is empty, but Firestore has
+    the doc. _require_owned_job must serve it (200) instead of 404."""
+    doc = _alice_firestore_doc()
+    monkeypatch.setattr(
+        app_main.jobs_persistence,
+        "get_job",
+        lambda jid: doc if jid == "alice-job-cross-machine" else None,
+    )
+    assert "alice-job-cross-machine" not in app_main._JOBS  # cold cache
+
+    r = client.get("/api/jobs/alice-job-cross-machine", headers=_alice_headers())
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["job_id"] == "alice-job-cross-machine"
+    assert body["status"] == "done"
+    assert body["total"] == 3
+    # The fallback path also rehydrated _JOBS for fast subsequent polls.
+    assert "alice-job-cross-machine" in app_main._JOBS
+    assert app_main._JOBS["alice-job-cross-machine"].uid == "alice"
+
+
+def test_bob_still_404s_when_alices_job_is_only_in_firestore(client, monkeypatch):
+    """The multi-machine fallback MUST NOT undermine isolation. Even
+    when the job is loaded from Firestore, the caller's uid is checked
+    against the doc's uid before returning. Bob still gets 404,
+    byte-identical to a bogus id."""
+    doc = _alice_firestore_doc("alice-firestore-only")
+    monkeypatch.setattr(
+        app_main.jobs_persistence,
+        "get_job",
+        lambda jid: doc if jid == "alice-firestore-only" else None,
+    )
+
+    real = client.get("/api/jobs/alice-firestore-only", headers=_bob_headers())
+    bogus = client.get("/api/jobs/does-not-exist-67890", headers=_bob_headers())
+    assert real.status_code == bogus.status_code == 404
+    # Same response body — enumeration prevention holds across the
+    # in-memory and Firestore paths.
+    assert real.json() == bogus.json()
+
+
+def test_neither_memory_nor_firestore_has_job_returns_404(client, monkeypatch):
+    """If both layers miss, we get 404 (not a 5xx or stack trace)."""
+    monkeypatch.setattr(app_main.jobs_persistence, "get_job", lambda jid: None)
+    r = client.get("/api/jobs/totally-unknown", headers=_alice_headers())
+    assert r.status_code == 404
+    assert r.json()["detail"] == "job not found"
+
+
 def test_submit_without_auth_is_rejected(client: TestClient):
     """Fail-closed: an authenticated submit without a uid (auth-test
     mode disabled) returns 401. This is what prevents legacy/unowned

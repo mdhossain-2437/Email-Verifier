@@ -516,6 +516,31 @@ def _filter_jobs_for_caller(uid: Optional[str]) -> list[Job]:
     return [j for j in _JOBS.values() if j.uid == uid]
 
 
+def _job_from_persisted_doc(doc: dict) -> Job:
+    """Reconstruct a ``Job`` dataclass from the Firestore-persisted dict.
+
+    Only the metadata fields are populated — ``results`` and ``task`` are
+    not in the persisted doc (results because of Firestore's 1 MB doc
+    limit; task because asyncio.Task is unpicklable). Status polling and
+    DELETE checks work fine with just the metadata; result-download
+    endpoints will still 404 from a non-owning machine until we ship a
+    separate results-storage layer.
+    """
+    return Job(
+        id=doc.get("id") or "",
+        status=doc.get("status", "queued"),
+        total=int(doc.get("total") or 0),
+        processed=int(doc.get("processed") or 0),
+        summary=dict(doc.get("summary") or {"valid": 0, "invalid": 0, "risky": 0, "unknown": 0}),
+        results=[],
+        started_at=doc.get("started_at"),
+        finished_at=doc.get("finished_at"),
+        error=doc.get("error"),
+        task=None,
+        uid=doc.get("uid"),
+    )
+
+
 def _require_owned_job(job_id: str, request: Request) -> Job:
     """Pull a job from ``_JOBS`` and assert it belongs to the caller.
 
@@ -523,11 +548,27 @@ def _require_owned_job(job_id: str, request: Request) -> Job:
     if the job is missing OR is owned by another user — we intentionally
     do NOT 403 here, so the response is indistinguishable from "no such
     job", preventing job-id enumeration / existence-disclosure attacks.
+
+    Multi-machine fallback: if ``_JOBS`` doesn't have this job_id (e.g.
+    the original POST landed on a different Fly machine or this machine
+    restarted), we look it up in Firestore before returning 404. The
+    same uid check is applied to the recovered doc, so privacy isolation
+    is preserved across machines.
     """
+    caller = _caller_uid(request)
     job = _JOBS.get(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail="job not found")
-    caller = _caller_uid(request)
+        # Fast path missed; consult Firestore. Persistence layer returns
+        # None on Firestore-unavailable, which still maps to 404 below.
+        doc = jobs_persistence.get_job(job_id)
+        if doc is None:
+            raise HTTPException(status_code=404, detail="job not found")
+        job = _job_from_persisted_doc(doc)
+        # Rehydrate the local cache so subsequent polls on this machine
+        # are fast. Safe because the uid check below still gates the
+        # response — a wrong-uid load won't leak.
+        if job.id:
+            _JOBS.setdefault(job.id, job)
     if not caller or job.uid != caller:
         # NOTE: 404 (not 403) on purpose. See docstring.
         raise HTTPException(status_code=404, detail="job not found")
