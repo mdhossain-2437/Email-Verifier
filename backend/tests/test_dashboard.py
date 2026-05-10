@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main as app_main
-from app.main import Job, _JOBS, app
+from app.main import Job, app
 
 
 @pytest.fixture()
@@ -18,9 +18,13 @@ def client() -> TestClient:
 
 @pytest.fixture(autouse=True)
 def clear_jobs():
-    _JOBS.clear()
+    # Access via the live module attribute — another test in the suite
+    # calls importlib.reload(app.main), which rebinds _JOBS to a fresh
+    # dict; importing _JOBS directly would leave us pointing at the
+    # stale pre-reload dict.
+    app_main._JOBS.clear()
     yield
-    _JOBS.clear()
+    app_main._JOBS.clear()
 
 
 def test_dashboard_empty_state(client: TestClient):
@@ -56,6 +60,7 @@ def test_dashboard_aggregates_real_job_state(client: TestClient):
         ],
         started_at=now - 60,
         finished_at=now - 30,
+        uid="tester",
     )
     job_running = Job(
         id="job-running",
@@ -65,9 +70,10 @@ def test_dashboard_aggregates_real_job_state(client: TestClient):
         summary={"valid": 40, "invalid": 5, "risky": 4, "unknown": 1},
         results=[],
         started_at=now,
+        uid="tester",
     )
-    _JOBS[job_done.id] = job_done
-    _JOBS[job_running.id] = job_running
+    app_main._JOBS[job_done.id] = job_done
+    app_main._JOBS[job_running.id] = job_running
 
     r = client.get("/api/dashboard")
     assert r.status_code == 200
@@ -100,7 +106,7 @@ def test_dashboard_caps_live_feed_and_recent_jobs(client: TestClient):
     the live feed, regardless of how many results each job has."""
     now = time.time()
     for i in range(20):
-        _JOBS[f"job-{i}"] = Job(
+        app_main._JOBS[f"job-{i}"] = Job(
             id=f"job-{i}",
             status="done",
             total=10,
@@ -112,6 +118,7 @@ def test_dashboard_caps_live_feed_and_recent_jobs(client: TestClient):
             ],
             started_at=now - i,
             finished_at=now - i + 1,
+            uid="tester",
         )
     body = client.get("/api/dashboard").json()
     assert len(body["recent_jobs"]) == 8
