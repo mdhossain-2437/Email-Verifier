@@ -45,7 +45,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { SignupPage } from "@/pages/SignupPage";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { SettingsPage } from "@/pages/SettingsPage";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ErrorBoundary, PanelErrorBoundary } from "@/components/ErrorBoundary";
 import { ServerStatusBanner } from "@/components/ServerStatusBanner";
 import { RouteFallback } from "@/components/common";
 import { PageHeader, Sidebar, Topbar } from "@/components/Layout";
@@ -295,6 +295,7 @@ function AppShell() {
                 }}
               >
             <Suspense fallback={<RouteFallback />}>
+              <PanelErrorBoundary name={titles[tab].title} resetKey={tab}>
               {tab === "command-center" && (
                 <CommandCenterView meta={meta} onNewJob={() => setTab("verify-bulk")} />
               )}
@@ -354,6 +355,7 @@ function AppShell() {
                   <AboutTab meta={meta} />
                 </div>
               )}
+              </PanelErrorBoundary>
             </Suspense>
               </motion.div>
             </AnimatePresence>

@@ -49,11 +49,11 @@ fly secrets set --app email-verifier-fly-<your-suffix> \
 ```
 
 If you use Firebase for auth, also push the service-account JSON. The
-backend reads it from the `FIREBASE_CREDENTIALS` env var:
+backend reads it from the `FIREBASE_ADMIN_CREDENTIALS` env var:
 
 ```bash
 fly secrets set --app email-verifier-fly-<your-suffix> \
-  FIREBASE_CREDENTIALS="$(cat /path/to/firebase-adminsdk.json)"
+  FIREBASE_ADMIN_CREDENTIALS="$(cat /path/to/firebase-adminsdk.json)"
 ```
 
 ## Deploy

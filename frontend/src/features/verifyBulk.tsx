@@ -818,7 +818,9 @@ export function VerifyBulkTab({
 
   useEffect(() => {
     return () => {
-      if (pollRef.current) window.clearInterval(pollRef.current);
+      // Polling now uses chained setTimeout instead of setInterval so
+      // each tick can decide its own cadence (see startPolling).
+      if (pollRef.current) window.clearTimeout(pollRef.current);
     };
   }, []);
 
@@ -843,31 +845,59 @@ export function VerifyBulkTab({
 
   const startPolling = (jobId: string, started: number) => {
     setActiveJobId(jobId);
-    pollRef.current = window.setInterval(async () => {
+    // Adaptive poll cadence — fast at first for responsive UI feel, then
+    // backs off so a stuck job doesn't hammer the backend forever:
+    //   first 5 polls (~3 sec wall):   600 ms  — instant feel
+    //   next 25 polls   (~37 sec wall): 1500 ms — quick progress bar
+    //   next 60 polls   (~5 min wall):  3000 ms — sustained job
+    //   after that:                     5000 ms — long-running job
+    let pollIdx = 0;
+    const cadenceMs = (n: number): number => {
+      if (n < 5) return 600;
+      if (n < 30) return 1500;
+      if (n < 90) return 3000;
+      return 5000;
+    };
+
+    let stopped = false;
+    const stop = () => {
+      stopped = true;
+      if (pollRef.current) window.clearTimeout(pollRef.current);
+      pollRef.current = null;
+    };
+
+    const tick = async () => {
+      if (stopped) return;
       try {
         const status = await api.jobStatus(jobId, false);
         setProgress({ processed: status.processed, total: status.total });
         setSummary(status.summary);
         if (status.status === "done") {
-          window.clearInterval(pollRef.current!);
-          pollRef.current = null;
+          stop();
           const full = await api.jobStatus(jobId, true);
           setResults(full.results ?? []);
           setRunning(false);
           setElapsedMs(performance.now() - started);
-        } else if (status.status === "error") {
-          window.clearInterval(pollRef.current!);
-          pollRef.current = null;
+          return;
+        }
+        if (status.status === "error") {
+          stop();
           setError(status.error || "job failed");
           setRunning(false);
+          return;
         }
       } catch (e) {
-        window.clearInterval(pollRef.current!);
-        pollRef.current = null;
+        stop();
         setError(e instanceof Error ? e.message : String(e));
         setRunning(false);
+        return;
       }
-    }, 600);
+      pollIdx += 1;
+      pollRef.current = window.setTimeout(tick, cadenceMs(pollIdx));
+    };
+
+    // Kick off immediately so the UI doesn't wait 600 ms for the first paint.
+    pollRef.current = window.setTimeout(tick, 0);
   };
 
   const beginRun = (job: JobStatus) => {

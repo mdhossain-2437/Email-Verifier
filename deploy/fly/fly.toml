@@ -11,7 +11,7 @@
 #     EMAIL_VERIFIER_ALLOWED_ORIGINS=https://your-frontend.example.com \
 #     EMAIL_VERIFIER_ENABLE_SMTP=false \
 #     EMAIL_VERIFIER_AUTH_REQUIRED=true \
-#     # ... plus any Firebase service-account JSON via FIREBASE_CREDENTIALS.
+#     # ... plus any Firebase service-account JSON via FIREBASE_ADMIN_CREDENTIALS.
 
 # NOTE: ``app`` is intentionally left as a placeholder — Fly auto-fills it
 # from `--name` on the first deploy. Don't hard-code your real name into

@@ -19,6 +19,9 @@ build/
 .env
 .env.*
 !.env.example
+# Firebase Web SDK config is PUBLIC by design (see frontend/.env.example);
+# commit it so the production build on Vercel picks up the project identifiers.
+!frontend/.env
 
 # Editors / OS
 .vscode/

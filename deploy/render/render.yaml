@@ -1,5 +1,8 @@
-# Render.com Blueprint for the Email Verifier backend (tier 3 —
+# Render.com Blueprint for the Email Verifier backend (tier 4 —
 # cold-start backup).
+#
+# Tier slot: HF Spaces takes tier 3 (always-on free), Render takes tier 4
+# because Render free services cold-start after 15 min idle.
 #
 # Deploy by clicking "New > Blueprint" on https://dashboard.render.com/ and
 # pointing it at this repo (Render auto-detects ``deploy/render/render.yaml``
@@ -29,11 +32,11 @@ services:
       - key: WEB_CONCURRENCY
         value: "1"
       - key: EMAIL_VERIFIER_DEPLOY_TIER
-        value: "3"
+        value: "4"
       - key: EMAIL_VERIFIER_DEPLOY_LABEL
-        value: "Render free backup"
+        value: "Render cold-start backup"
       # Set the rest as secrets in the Render dashboard:
       #   EMAIL_VERIFIER_ALLOWED_ORIGINS=https://your-frontend.example.com
       #   EMAIL_VERIFIER_AUTH_REQUIRED=true
       #   EMAIL_VERIFIER_ENABLE_SMTP=false
-      #   FIREBASE_CREDENTIALS=<paste service-account JSON>
+      #   FIREBASE_ADMIN_CREDENTIALS=<paste service-account JSON>

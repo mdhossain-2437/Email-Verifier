@@ -1,0 +1,85 @@
+# Koyeb service definition for the Email Verifier backend (alternative
+# tier 3 — paid only since 2024; see deploy/koyeb/README.md for the
+# full deprecation note). Deploy from the repo root with:
+#
+#   koyeb service create email-verifier-koyeb \
+#     --app email-verifier \
+#     --git github.com/mdhossain-2437/Email-Verifier \
+#     --git-branch main \
+#     --git-builder docker \
+#     --git-docker-dockerfile deploy/koyeb/Dockerfile \
+#     --instance-type nano \
+#     --regions fra \
+#     --port 8080:http \
+#     --route /:8080 \
+#     --checks 8080:http:/healthz \
+#     --env PORT=8080 \
+#     --env WEB_CONCURRENCY=1 \
+#     --env EMAIL_VERIFIER_DEPLOY_TIER=3 \
+#     --env "EMAIL_VERIFIER_DEPLOY_LABEL=Koyeb backup" \
+#     --env EMAIL_VERIFIER_AUTH_REQUIRED=true \
+#     --env EMAIL_VERIFIER_ENABLE_SMTP=false \
+#     --env "EMAIL_VERIFIER_ALLOWED_ORIGINS=https://your-frontend.example.com"
+#
+# Then attach FIREBASE_ADMIN_CREDENTIALS as a secret (see README) and
+# redeploy. Koyeb persists secrets across deploys.
+#
+# This file is the declarative equivalent of the CLI flags above. Koyeb
+# does not currently support ``koyeb deploy --config <yaml>`` directly,
+# so this file is informational — paste the matching values into the
+# Koyeb dashboard or use the CLI command shown above.
+
+name: email-verifier-koyeb
+type: web
+git:
+  repository: github.com/mdhossain-2437/Email-Verifier
+  branch: main
+  builder: docker
+  buildpack: null
+  docker:
+    dockerfile: deploy/koyeb/Dockerfile
+
+instance_type: nano  # smallest paid instance; Koyeb's free tier was removed in 2024
+regions:
+  - fra  # Frankfurt POP — different network than Fly's `bom`. Use `was` (Washington) as alternative.
+
+ports:
+  - port: 8080
+    protocol: http
+
+routes:
+  - path: /
+    port: 8080
+
+health_checks:
+  - port: 8080
+    protocol: http
+    path: /healthz
+    interval: 15s
+    timeout: 5s
+    initial_delay: 30s
+
+env:
+  - key: PORT
+    value: "8080"
+  - key: WEB_CONCURRENCY
+    value: "1"
+  - key: EMAIL_VERIFIER_DEPLOY_TIER
+    value: "3"
+  - key: EMAIL_VERIFIER_DEPLOY_LABEL
+    value: "Koyeb backup"
+  - key: EMAIL_VERIFIER_AUTH_REQUIRED
+    value: "true"
+  - key: EMAIL_VERIFIER_ENABLE_SMTP
+    value: "false"
+  # The two below MUST be set as Koyeb secrets, not committed to git:
+  #   koyeb secret create firebase-admin-credentials --value "$(cat /path/to/sa.json)"
+  #   koyeb service update email-verifier-koyeb \
+  #     --env "FIREBASE_ADMIN_CREDENTIALS={{ secret.firebase-admin-credentials }}"
+  #
+  # And the CORS allowlist:
+  #   --env "EMAIL_VERIFIER_ALLOWED_ORIGINS=https://your-frontend.example.com,http://localhost:5173"
+
+scaling:
+  min: 1
+  max: 1  # Free instance is single-replica.

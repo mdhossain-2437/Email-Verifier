@@ -36,12 +36,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import api_keys, auth, profiles
+from . import api_keys, auth, jobs_persistence, profiles
 from .auth import get_current_user, resolve_authorization
 from .disposable import is_disposable, is_role
 from .extractor import extract_emails, extract_unique
 from .files import extract_from_file, supported_extensions
 from .lead_finder import LeadInput, verify_lead
+from .lead_providers import registry as lead_registry, find_leads_multi
 from .locale import country_for_domain
 from .providers import provider_for_domain
 from .verifier import VerificationResult, verify_email, verify_many
@@ -110,7 +111,7 @@ app.add_middleware(
 
 
 MAX_BULK_SYNC = 200  # cap for /api/verify-bulk to keep response under HTTP timeouts
-MAX_JOB_INPUTS = 100_000
+MAX_JOB_INPUTS = 500_000  # bumped from 100k as part of Million-scale Phase A
 # Smaller cap when running in fallback mode (e.g. on Vercel where serverless
 # functions time out at 60s). The frontend exposes this in the degraded-mode
 # banner so users understand why their massive list got rejected when the
@@ -478,9 +479,100 @@ class Job:
     finished_at: Optional[float] = None
     error: Optional[str] = None
     task: Optional[asyncio.Task] = None
+    # uid is set at submit time so we can enforce per-user isolation on
+    # GET /api/jobs/{id}, DELETE /api/jobs/{id}, result downloads, and
+    # /api/dashboard aggregations. Jobs created before this field existed
+    # (e.g. older Firestore docs) have uid=None and are treated as
+    # legacy/unowned — they are only visible to admins (not yet
+    # implemented) and never leak to other authenticated users.
+    uid: Optional[str] = None
 
 
 _JOBS: dict[str, Job] = {}
+
+
+def _job_uid(job: Job) -> Optional[str]:
+    """Convenience accessor for tests that want to assert ownership."""
+    return job.uid
+
+
+def _caller_uid(request: Request) -> Optional[str]:
+    """Return the uid of the user attached to ``request.state`` by the
+    auth-gate middleware. Returns ``None`` if the request was let through
+    public (which currently only includes /api/version + /api/meta)."""
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return None
+    return getattr(user, "uid", None)
+
+
+def _filter_jobs_for_caller(uid: Optional[str]) -> list[Job]:
+    """Return only the jobs owned by ``uid``. If ``uid`` is None we
+    return an empty list rather than every job — defensive default so
+    a misconfigured caller can't accidentally see everyone's data.
+    """
+    if not uid:
+        return []
+    return [j for j in _JOBS.values() if j.uid == uid]
+
+
+def _job_from_persisted_doc(doc: dict) -> Job:
+    """Reconstruct a ``Job`` dataclass from the Firestore-persisted dict.
+
+    Only the metadata fields are populated — ``results`` and ``task`` are
+    not in the persisted doc (results because of Firestore's 1 MB doc
+    limit; task because asyncio.Task is unpicklable). Status polling and
+    DELETE checks work fine with just the metadata; result-download
+    endpoints will still 404 from a non-owning machine until we ship a
+    separate results-storage layer.
+    """
+    return Job(
+        id=doc.get("id") or "",
+        status=doc.get("status", "queued"),
+        total=int(doc.get("total") or 0),
+        processed=int(doc.get("processed") or 0),
+        summary=dict(doc.get("summary") or {"valid": 0, "invalid": 0, "risky": 0, "unknown": 0}),
+        results=[],
+        started_at=doc.get("started_at"),
+        finished_at=doc.get("finished_at"),
+        error=doc.get("error"),
+        task=None,
+        uid=doc.get("uid"),
+    )
+
+
+def _require_owned_job(job_id: str, request: Request) -> Job:
+    """Pull a job from ``_JOBS`` and assert it belongs to the caller.
+
+    Returns the Job on success. Raises 404 (same response as job-not-found)
+    if the job is missing OR is owned by another user — we intentionally
+    do NOT 403 here, so the response is indistinguishable from "no such
+    job", preventing job-id enumeration / existence-disclosure attacks.
+
+    Multi-machine fallback: if ``_JOBS`` doesn't have this job_id (e.g.
+    the original POST landed on a different Fly machine or this machine
+    restarted), we look it up in Firestore before returning 404. The
+    same uid check is applied to the recovered doc, so privacy isolation
+    is preserved across machines.
+    """
+    caller = _caller_uid(request)
+    job = _JOBS.get(job_id)
+    if job is None:
+        # Fast path missed; consult Firestore. Persistence layer returns
+        # None on Firestore-unavailable, which still maps to 404 below.
+        doc = jobs_persistence.get_job(job_id)
+        if doc is None:
+            raise HTTPException(status_code=404, detail="job not found")
+        job = _job_from_persisted_doc(doc)
+        # Rehydrate the local cache so subsequent polls on this machine
+        # are fast. Safe because the uid check below still gates the
+        # response — a wrong-uid load won't leak.
+        if job.id:
+            _JOBS.setdefault(job.id, job)
+    if not caller or job.uid != caller:
+        # NOTE: 404 (not 403) on purpose. See docstring.
+        raise HTTPException(status_code=404, detail="job not found")
+    return job
 
 
 def _warn_if_multi_worker() -> None:
@@ -512,6 +604,24 @@ def _warn_if_multi_worker() -> None:
 _warn_if_multi_worker()
 
 
+@app.on_event("startup")
+async def _on_startup_mark_interrupted_jobs() -> None:
+    """Flag any jobs that were mid-flight when the backend last
+    restarted. They show up in the dashboard as ``interrupted`` so the
+    user can re-submit instead of seeing a stale ``running`` forever.
+    """
+    try:
+        count = jobs_persistence.mark_interrupted_on_startup()
+        if count:
+            import logging
+
+            logging.getLogger(__name__).info(
+                "Marked %d in-flight jobs as interrupted on startup", count
+            )
+    except Exception:  # noqa: BLE001 - never let this block startup
+        pass
+
+
 def _summarize(results: list[VerificationResult]) -> dict[str, int]:
     summary = {"valid": 0, "invalid": 0, "risky": 0, "unknown": 0}
     for r in results:
@@ -538,6 +648,7 @@ async def version_endpoint():
     the backend has loaded its service-account credentials. We expose this
     on the public version endpoint (not on a protected route) precisely so
     a 401-ed client can still tell *why* it's getting locked out."""
+    firestore_ok, firestore_error = auth.firestore_ping()
     return {
         "name": "email-verifier",
         "version": app.version,
@@ -548,6 +659,8 @@ async def version_endpoint():
         "max_bulk_sync": _effective_max_bulk_sync(),
         "firebase_ready": auth.firebase_ready(),
         "firebase_init_error": auth.firebase_init_error(),
+        "firestore_ok": firestore_ok,
+        "firestore_error": firestore_error,
         "deploy_mode": DEPLOY_MODE,
         "is_fallback": _is_fallback(),
         "deploy_tier": DEPLOY_TIER,
@@ -577,13 +690,17 @@ async def meta_endpoint():
 
 
 @app.get("/api/dashboard")
-async def dashboard_endpoint():
+async def dashboard_endpoint(request: Request):
     """Aggregate stats across the in-memory job registry for the Command
-    Center dashboard. Everything surfaced here is real — we never fake
-    numbers. When no jobs have run yet, totals are 0 and the recent_jobs
-    list is empty (the UI handles the empty state)."""
+    Center dashboard. Scoped strictly to the calling user — no other
+    user's jobs / counts / live-feed rows are visible here.
+
+    Everything surfaced is real — we never fake numbers. When the caller
+    has no jobs yet, totals are 0 and the recent_jobs list is empty
+    (the UI handles the empty state)."""
     started = time.perf_counter()
-    jobs = list(_JOBS.values())
+    caller_uid = _caller_uid(request)
+    jobs = _filter_jobs_for_caller(caller_uid)
 
     total_processed = sum(j.processed for j in jobs)
     total_valid = sum(j.summary.get("valid", 0) for j in jobs)
@@ -883,9 +1000,11 @@ async def _run_job(
     check_mx: bool,
     check_smtp: bool,
     concurrency: int,
+    uid: Optional[str] = None,
 ):
     job.status = "running"
     job.started_at = time.time()
+    jobs_persistence.save_job(job, uid=uid)
     sem = asyncio.Semaphore(concurrency)
 
     async def _one(addr: str):
@@ -894,6 +1013,7 @@ async def _run_job(
             job.processed += 1
             job.summary[res.status] = job.summary.get(res.status, 0) + 1
             job.results.append(res.to_dict())
+            jobs_persistence.maybe_save_progress(job, uid=uid)
 
     try:
         await asyncio.gather(*(_one(a) for a in emails))
@@ -903,6 +1023,7 @@ async def _run_job(
         job.error = str(exc)
     finally:
         job.finished_at = time.time()
+        jobs_persistence.save_job(job, uid=uid)
 
 
 def _normalise_for_job(req: JobSubmitRequest, raw_emails: list[str]) -> list[str]:
@@ -939,7 +1060,7 @@ def _normalise_for_job(req: JobSubmitRequest, raw_emails: list[str]) -> list[str
 
 
 @app.post("/api/jobs", response_model=JobStatusResponse)
-async def submit_job(req: JobSubmitRequest):
+async def submit_job(req: JobSubmitRequest, request: Request = None):  # type: ignore[assignment]
     if not req.emails and not req.text:
         raise HTTPException(status_code=400, detail="provide either 'emails' or 'text'")
 
@@ -954,8 +1075,21 @@ async def submit_job(req: JobSubmitRequest):
             detail=f"max {MAX_JOB_INPUTS} emails per job - split your input",
         )
 
-    job = Job(id=uuid.uuid4().hex, total=len(emails))
+    uid = _caller_uid(request) if request is not None else None
+    # Fail closed: jobs MUST have an owner so the per-user filter on
+    # GETs is meaningful. The auth-gate middleware already requires a
+    # valid Bearer token to reach this endpoint, so reaching here with
+    # uid=None indicates a misconfigured environment (e.g. missing
+    # FIREBASE_ADMIN_CREDENTIALS in production).
+    if not uid:
+        raise HTTPException(
+            status_code=401,
+            detail="authenticated user required to submit a job",
+        )
+
+    job = Job(id=uuid.uuid4().hex, total=len(emails), uid=uid)
     _JOBS[job.id] = job
+    jobs_persistence.save_job(job, uid=uid)
     job.task = asyncio.create_task(
         _run_job(
             job,
@@ -963,6 +1097,7 @@ async def submit_job(req: JobSubmitRequest):
             check_mx=req.check_mx,
             check_smtp=req.check_smtp,
             concurrency=req.concurrency,
+            uid=uid,
         )
     )
     return _job_to_status(job, include_results=False)
@@ -970,6 +1105,7 @@ async def submit_job(req: JobSubmitRequest):
 
 @app.post("/api/jobs/upload", response_model=JobStatusResponse)
 async def submit_job_upload(
+    request: Request,
     file: UploadFile = File(...),
     check_mx: bool = Form(True),
     check_smtp: bool = Form(False),
@@ -1005,7 +1141,7 @@ async def submit_job_upload(
         drop_disposable=drop_disposable,
         drop_role=drop_role,
     )
-    return await submit_job(req)
+    return await submit_job(req, request=request)
 
 
 def _job_to_status(job: Job, *, include_results: bool) -> JobStatusResponse:
@@ -1022,11 +1158,43 @@ def _job_to_status(job: Job, *, include_results: bool) -> JobStatusResponse:
     )
 
 
+@app.get("/api/jobs")
+async def list_jobs_endpoint(request: Request, limit: int = 50):
+    """Return the caller's recent jobs from Firestore. Survives backend
+    restarts unlike the in-memory ``_JOBS`` registry. Useful for the
+    dashboard's history pane.
+
+    Strictly scoped to the calling user — never returns another user's
+    jobs even when Firestore is unavailable and we fall back to the
+    in-memory listing.
+    """
+    uid = _caller_uid(request)
+    limit = max(1, min(limit, 200))
+    persisted = jobs_persistence.list_jobs(uid=uid, limit=limit) if uid else []
+    if persisted:
+        return {"jobs": persisted, "source": "firestore"}
+    # In-memory fallback is also scoped per-user (defence in depth in
+    # case Firestore listing fails for some reason but the jobs still
+    # live in process memory).
+    in_memory = [
+        {
+            "id": j.id,
+            "status": j.status,
+            "total": j.total,
+            "processed": j.processed,
+            "summary": dict(j.summary),
+            "started_at": j.started_at,
+            "finished_at": j.finished_at,
+            "error": j.error,
+        }
+        for j in _filter_jobs_for_caller(uid)[-limit:]
+    ]
+    return {"jobs": in_memory, "source": "memory"}
+
+
 @app.get("/api/jobs/{job_id}", response_model=JobStatusResponse)
-async def job_status(job_id: str, include_results: bool = False):
-    job = _JOBS.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="job not found")
+async def job_status(job_id: str, request: Request, include_results: bool = False):
+    job = _require_owned_job(job_id, request)
     return _job_to_status(job, include_results=include_results)
 
 
@@ -1123,35 +1291,35 @@ _FORMAT_MEDIA = {
 @app.get("/api/jobs/{job_id}/results.csv")
 async def job_results_csv(
     job_id: str,
+    request: Request,
     status: Optional[str] = Query(default=None, description="comma-separated statuses"),
 ):
     """Backwards-compatible CSV endpoint kept stable for existing callers.
     New clients should use ``/api/jobs/{id}/results.{format}`` for xlsx/txt/json."""
-    return await _serve_job_results(job_id, "csv", status)
+    return await _serve_job_results(job_id, "csv", status, request)
 
 
 @app.get("/api/jobs/{job_id}/results.{fmt}")
 async def job_results_format(
     job_id: str,
     fmt: str,
+    request: Request,
     status: Optional[str] = Query(default=None, description="comma-separated statuses"),
 ):
     """Download the job's verification results in ``csv``, ``xlsx``,
     ``txt`` (one address per line) or ``json``. Optional ``?status=valid``
     or ``?status=valid,risky`` filters the export to specific outcomes."""
-    return await _serve_job_results(job_id, fmt, status)
+    return await _serve_job_results(job_id, fmt, status, request)
 
 
-async def _serve_job_results(job_id: str, fmt: str, status: Optional[str]):
+async def _serve_job_results(job_id: str, fmt: str, status: Optional[str], request: Request):
     fmt = (fmt or "").lower().strip()
     if fmt not in _FORMAT_MEDIA:
         raise HTTPException(
             status_code=400,
             detail=f"unsupported format '{fmt}'; use one of csv/xlsx/txt/json",
         )
-    job = _JOBS.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="job not found")
+    job = _require_owned_job(job_id, request)
     if job.status != "done":
         raise HTTPException(status_code=409, detail=f"job is {job.status}")
 
@@ -1251,11 +1419,96 @@ async def lead_finder_endpoint(req: LeadFinderRequest):
     )
 
 
+# ---------------------------------------------------------------------------
+# Lead-finder v2 — multi-provider domain lookup
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/lead-finder/providers")
+async def lead_finder_providers():
+    """List registered lead-finding providers and whether they're enabled."""
+    return {"providers": lead_registry()}
+
+
+class DomainSearchRequest(BaseModel):
+    domain: str = Field(..., description="Target domain, e.g. 'acme.com'.")
+    person_name: Optional[str] = Field(None, description="Optional person name to narrow results.")
+    company: Optional[str] = Field(None, description="Company name (display only).")
+    providers: Optional[list[str]] = Field(
+        None,
+        description="Only use these providers. Omit to use all enabled ones.",
+    )
+
+
+class DomainSearchResultItem(BaseModel):
+    email: str
+    confidence: float
+    source: str
+    name: Optional[str] = None
+    title: Optional[str] = None
+
+
+class DomainSearchResponse(BaseModel):
+    domain: str
+    total: int
+    elapsed_ms: float
+    providers_used: list[str]
+    results: list[DomainSearchResultItem]
+
+
+@app.post("/api/lead-finder/domain", response_model=DomainSearchResponse)
+async def lead_finder_domain_search(req: DomainSearchRequest):
+    """Search for emails at a domain using all enabled providers.
+
+    This is the v2 lead-finder that merges results from the pattern
+    engine, website crawl, Hunter.io, and Brave Search (whichever are
+    configured). Unlike the v1 ``/api/lead-finder`` endpoint which needs
+    per-person targets, this accepts just a domain and returns every
+    email it can find.
+    """
+    started = time.perf_counter()
+    by_provider = await find_leads_multi(
+        domain=req.domain,
+        person_name=req.person_name,
+        company=req.company,
+        providers=req.providers,
+    )
+
+    # Deduplicate across providers, keeping the highest confidence.
+    merged: dict[str, DomainSearchResultItem] = {}
+    for _prov_name, results in by_provider.items():
+        for r in results:
+            key = r.email.lower()
+            existing = merged.get(key)
+            if existing is None or r.confidence > existing.confidence:
+                merged[key] = DomainSearchResultItem(
+                    email=r.email,
+                    confidence=r.confidence,
+                    source=r.source,
+                    name=r.name,
+                    title=r.title,
+                )
+
+    items = sorted(merged.values(), key=lambda x: x.confidence, reverse=True)
+    elapsed = (time.perf_counter() - started) * 1000
+
+    return DomainSearchResponse(
+        domain=req.domain,
+        total=len(items),
+        elapsed_ms=elapsed,
+        providers_used=list(by_provider.keys()),
+        results=items,
+    )
+
+
 @app.delete("/api/jobs/{job_id}")
-async def cancel_job(job_id: str):
-    job = _JOBS.pop(job_id, None)
-    if not job:
-        raise HTTPException(status_code=404, detail="job not found")
+async def cancel_job(job_id: str, request: Request):
+    # Verify ownership BEFORE deleting — _require_owned_job returns 404
+    # on missing OR non-owned, so we never let one user delete another
+    # user's job (and the response is indistinguishable from "no such
+    # job", preventing job-id enumeration).
+    job = _require_owned_job(job_id, request)
+    _JOBS.pop(job_id, None)
     if job.task and not job.task.done():
         job.task.cancel()
     return {"status": "deleted"}
