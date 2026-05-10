@@ -60,7 +60,7 @@ export function flagPills(r: VerifyResult, dense = false): ReactNode {
     items.push(
       <span
         key="cc"
-        className={`${cls} rounded bg-zinc-800/80 text-zinc-200 border border-zinc-700`}
+        className={`${cls} rounded bg-ink-50/80 text-zinc-200 border border-white/[0.08]`}
         title={r.country_name}
       >
         {r.country_code}

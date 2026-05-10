@@ -194,7 +194,7 @@ export function ProfilePage() {
                   }}
                 />
               ) : (
-                <div className="w-16 h-16 rounded-full bg-indigo-500/20 ring-1 ring-indigo-400/30 grid place-items-center text-lg font-semibold text-indigo-200">
+                <div className="w-16 h-16 rounded-full bg-lime/[0.12] ring-1 ring-lime/30 grid place-items-center text-lg font-semibold text-lime-200">
                   {initials}
                 </div>
               )}
@@ -205,7 +205,7 @@ export function ProfilePage() {
                 <div className="text-xs text-zinc-400 truncate">
                   {profile?.email || "—"}
                 </div>
-                <div className="mt-1 inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-emerald-300">
+                <div className="mt-1 inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-lime">
                   <ShieldCheck className="w-3 h-3" /> {profile?.plan || "free"}
                 </div>
               </div>
@@ -221,7 +221,7 @@ export function ProfilePage() {
                   type="text"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 focus:bg-white/10 focus:border-indigo-400/40 outline-none px-3 py-2"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 focus:bg-white/10 focus:border-lime/40 outline-none px-3 py-2"
                   placeholder="Delowar Hossain"
                 />
               </div>
@@ -234,7 +234,7 @@ export function ProfilePage() {
                   type="url"
                   value={photoURL}
                   onChange={(e) => setPhotoURL(e.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 focus:bg-white/10 focus:border-indigo-400/40 outline-none px-3 py-2"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 focus:bg-white/10 focus:border-lime/40 outline-none px-3 py-2"
                   placeholder="https://…"
                 />
               </div>
@@ -245,7 +245,7 @@ export function ProfilePage() {
                 type="button"
                 onClick={() => void onSave()}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 transition"
+                className="inline-flex items-center gap-2 rounded-lg bg-lime hover:bg-lime-300 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 transition"
               >
                 {saving ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -255,7 +255,7 @@ export function ProfilePage() {
                 Save changes
               </button>
               {savedAt && (
-                <span className="inline-flex items-center gap-1.5 text-xs text-emerald-300">
+                <span className="inline-flex items-center gap-1.5 text-xs text-lime">
                   <CheckCircle2 className="w-3.5 h-3.5" /> Saved
                 </span>
               )}
@@ -349,7 +349,7 @@ export function ProfilePage() {
               <p className="text-[11px] leading-relaxed">
                 Use this if you signed in on a shared device. Your API keys
                 remain valid; revoke them from{" "}
-                <Link to="/app/keys" className="text-indigo-300">
+                <Link to="/app/keys" className="text-lime">
                   Settings → API Keys
                 </Link>
                 .
@@ -377,7 +377,7 @@ function Row({
 }) {
   const toneCls =
     tone === "good"
-      ? "text-emerald-300"
+      ? "text-lime"
       : tone === "warn"
         ? "text-amber-300"
         : "text-zinc-200";

@@ -7,15 +7,19 @@
  * (which is whitelisted from the auth gate) so visitors see a live signal
  * instead of placeholder text. We never call /api/dashboard from here
  * because that endpoint requires auth — by design.
+ *
+ * Design: sub-brand of delowarhossain.dev. Editorial dark surfaces, lime
+ * accent, monospace section captions, oversized Space-Grotesk display
+ * headlines, and framer-motion section reveals.
  */
 
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { motion, type Variants } from "framer-motion";
 import {
   ArrowRight,
   CheckCircle2,
   Code2,
-  Database,
   Filter,
   Github,
   Globe,
@@ -24,7 +28,6 @@ import {
   Lock,
   Mail,
   Server,
-  Shield,
   ShieldCheck,
   Sparkles,
   Upload,
@@ -32,6 +35,7 @@ import {
 } from "lucide-react";
 
 import { API_BASE } from "@/lib/api";
+import { GITHUB_REPO, PORTFOLIO_URL } from "@/lib/uiTypes";
 
 interface VersionPayload {
   name: string;
@@ -42,9 +46,7 @@ interface VersionPayload {
   firebase_init_error?: string | null;
 }
 
-const PORTFOLIO_URL = "https://delowarhossain.dev";
 const GITHUB_PROFILE = "https://github.com/mdhossain-2437";
-const GITHUB_REPO = "https://github.com/mdhossain-2437/Email-Verifier";
 
 const FEATURES = [
   {
@@ -82,17 +84,17 @@ const FEATURES = [
 const HOW_IT_WORKS = [
   {
     icon: Mail,
-    title: "1. Sign in",
+    title: "Sign in",
     body: "Google, GitHub, or email/password. We never see your password — Firebase Auth handles credentials.",
   },
   {
     icon: Upload,
-    title: "2. Bring your list",
+    title: "Bring your list",
     body: "Drop a file or paste emails. We extract, dedupe, and clean before any verification spend.",
   },
   {
     icon: ShieldCheck,
-    title: "3. Verify + export",
+    title: "Verify + export",
     body: "Multi-stage checks run in the background. Export valid-only as CSV / XLSX / TXT / JSON when ready.",
   },
 ];
@@ -120,6 +122,31 @@ const PRINCIPLES = [
   },
 ];
 
+// Editorial easing for entrance/exit motion — same curve used in App.tsx
+// route transitions. Tuple cast keeps it from being inferred as `number[]`
+// (which framer-motion rejects as not assignable to `Easing[]`).
+const editorialEase: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
+
+// Standard awwwards-style viewport-triggered reveal.
+const reveal: Variants = {
+  hidden: { opacity: 0, y: 24 },
+  show: (i: number = 0) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.6, ease: editorialEase, delay: 0.05 * i },
+  }),
+};
+
+function Eyebrow({ index, label }: { index: string; label: string }) {
+  return (
+    <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-zinc-400 flex items-center gap-2">
+      <span className="text-lime">/ {index}</span>
+      <span>—</span>
+      <span>{label}</span>
+    </div>
+  );
+}
+
 export function LandingPage() {
   const [version, setVersion] = useState<VersionPayload | null>(null);
   const [loadingVersion, setLoadingVersion] = useState(true);
@@ -145,226 +172,271 @@ export function LandingPage() {
   }, []);
 
   const versionLine = useMemo(() => {
-    if (loadingVersion) return "Connecting to live engine…";
-    if (!version) return "Engine status: offline";
+    if (loadingVersion) return "connecting to live engine…";
+    if (!version) return "engine status: offline";
     const sha = version.git_sha ? ` · ${version.git_sha.slice(0, 7)}` : "";
     const auth = version.firebase_ready ? "auth ready" : "auth bootstrapping";
     return `v${version.version}${sha} · ${auth}`;
   }, [loadingVersion, version]);
 
   return (
-    <div className="relative min-h-screen text-zinc-100">
-      <div className="absolute inset-0 bg-grid pointer-events-none" />
+    <div className="relative min-h-screen text-zinc-100 bg-ink overflow-hidden">
+      <div className="absolute inset-0 bg-grid pointer-events-none opacity-60" />
       <div className="absolute inset-0 bg-glow pointer-events-none" />
 
       <div className="relative">
-        <header className="px-6 lg:px-10 py-5 flex items-center justify-between gap-4">
-          <Link to="/" className="flex items-center gap-2 group">
-            <span className="w-9 h-9 rounded-xl bg-indigo-500/15 border border-indigo-400/30 grid place-items-center">
-              <ShieldCheck className="w-5 h-5 text-indigo-300" />
+        <header className="px-4 sm:px-6 lg:px-10 py-5 flex items-center justify-between gap-3 max-w-shell mx-auto">
+          <Link to="/" className="flex items-center gap-2.5 group">
+            <span className="w-10 h-10 rounded-2xl bg-lime grid place-items-center text-ink shadow-glow">
+              <ShieldCheck className="w-5 h-5" strokeWidth={2.4} />
             </span>
-            <span className="text-sm font-semibold tracking-tight">
-              Delowar&apos;s Email Verifier
+            <span className="font-display text-sm sm:text-base font-bold tracking-tight">
+              <span className="text-lime">Delowar&apos;s</span> Email Verifier
             </span>
           </Link>
-          <nav className="hidden md:flex items-center gap-6 text-sm text-zinc-400">
-            <a href="#features" className="hover:text-zinc-100">
+          <nav className="hidden md:flex items-center gap-7 font-mono text-[11px] uppercase tracking-[0.18em] text-zinc-400">
+            <a href="#features" className="hover:text-lime transition-colors">
               Features
             </a>
-            <a href="#how-it-works" className="hover:text-zinc-100">
+            <a href="#how-it-works" className="hover:text-lime transition-colors">
               How it works
             </a>
-            <a href="#open-source" className="hover:text-zinc-100">
+            <a href="#open-source" className="hover:text-lime transition-colors">
               Open source
             </a>
             <a
               href={GITHUB_REPO}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 hover:text-zinc-100"
+              className="inline-flex items-center gap-1.5 hover:text-lime transition-colors"
             >
-              <Github className="w-4 h-4" /> GitHub
+              <Github className="w-3.5 h-3.5" /> GitHub
             </a>
           </nav>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <Link
               to="/login"
-              className="text-sm text-zinc-300 hover:text-white px-3 py-2 rounded-lg"
+              className="hidden sm:inline-flex items-center text-sm text-zinc-300 hover:text-white min-h-[44px] px-3 py-2 rounded-full transition-colors"
             >
               Sign in
             </Link>
             <Link
               to="/signup"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-white bg-gradient-to-br from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 px-4 py-2 rounded-lg shadow-lg shadow-indigo-500/20"
+              className="btn-primary text-sm"
             >
-              Get started <ArrowRight className="w-3.5 h-3.5" />
+              Get started <ArrowRight className="w-4 h-4" aria-hidden />
             </Link>
           </div>
         </header>
 
         {/* Hero */}
-        <section className="px-6 lg:px-10 pt-10 pb-16 max-w-6xl mx-auto">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-emerald-300">
-            <Sparkles className="w-3 h-3" /> Open source · MIT
-          </div>
-          <h1 className="mt-5 text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.05]">
-            Verify millions of emails.{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-br from-indigo-300 via-violet-300 to-sky-300">
-              Without the spam-tooling baggage.
-            </span>
-          </h1>
-          <p className="mt-5 max-w-2xl text-lg text-zinc-400 leading-relaxed">
+        <section className="px-4 sm:px-6 lg:px-10 pt-10 sm:pt-16 pb-20 max-w-shell mx-auto">
+          <motion.div
+            initial="hidden"
+            animate="show"
+            variants={reveal}
+            custom={0}
+            className="inline-flex items-center gap-2 rounded-full border border-lime/30 bg-lime/[0.06] px-3 py-1 font-mono text-[11px] uppercase tracking-[0.2em] text-lime"
+          >
+            <Sparkles className="w-3 h-3" aria-hidden /> Open source · MIT
+          </motion.div>
+          <motion.h1
+            initial="hidden"
+            animate="show"
+            variants={reveal}
+            custom={1}
+            className="mt-7 font-display font-bold tracking-tightest text-display-xl sm:text-display-2xl leading-[0.95]"
+          >
+            Verify emails.{" "}
+            <span className="text-lime">At scale.</span>{" "}
+            <span className="text-zinc-500">Without the spam-tooling baggage.</span>
+          </motion.h1>
+          <motion.p
+            initial="hidden"
+            animate="show"
+            variants={reveal}
+            custom={2}
+            className="mt-7 max-w-2xl text-base sm:text-lg text-zinc-400 leading-relaxed"
+          >
             Bring your own list — paste, drop a CSV, or upload a 1M-row XLSX.
             Get back a clean, multi-stage-verified file with country, role, MX,
             free-mailbox, and disposable signals on every row. No scraping.
             Per-user data isolation. Self-hostable.
-          </p>
-          <div className="mt-7 flex flex-wrap items-center gap-3">
-            <Link
-              to="/signup"
-              className="inline-flex items-center gap-2 text-sm font-medium text-white bg-gradient-to-br from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 px-5 py-3 rounded-xl shadow-lg shadow-indigo-500/20"
-            >
-              Create your free account <ArrowRight className="w-4 h-4" />
+          </motion.p>
+          <motion.div
+            initial="hidden"
+            animate="show"
+            variants={reveal}
+            custom={3}
+            className="mt-8 flex flex-wrap items-center gap-3"
+          >
+            <Link to="/signup" className="btn-primary text-sm">
+              Create your free account <ArrowRight className="w-4 h-4" aria-hidden />
             </Link>
-            <Link
-              to="/login"
-              className="inline-flex items-center gap-2 text-sm font-medium text-zinc-200 border border-white/10 hover:bg-white/5 px-5 py-3 rounded-xl"
-            >
+            <Link to="/login" className="btn-ghost text-sm">
               I already have one
             </Link>
             <a
               href={GITHUB_REPO}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200"
+              className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-lime transition-colors min-h-[44px] px-3"
             >
-              <Github className="w-4 h-4" /> Star on GitHub
+              <Github className="w-4 h-4" aria-hidden /> Star on GitHub
             </a>
-          </div>
-          <div className="mt-6 inline-flex items-center gap-2 text-xs text-zinc-500">
+          </motion.div>
+          <motion.div
+            initial="hidden"
+            animate="show"
+            variants={reveal}
+            custom={4}
+            className="mt-8 inline-flex items-center gap-2 text-xs text-zinc-500"
+          >
             {loadingVersion ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
+              <Loader2 className="w-3 h-3 animate-spin text-lime" aria-hidden />
             ) : (
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  version ? "bg-emerald-400" : "bg-zinc-500"
+                  version ? "bg-lime pulse-soft" : "bg-zinc-500"
                 }`}
+                aria-hidden
               />
             )}
-            <span className="font-mono">{versionLine}</span>
-          </div>
+            <span className="font-mono uppercase tracking-[0.16em]">{versionLine}</span>
+          </motion.div>
         </section>
 
         {/* Features */}
-        <section id="features" className="px-6 lg:px-10 py-16 max-w-6xl mx-auto">
+        <motion.section
+          id="features"
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.15 }}
+          variants={reveal}
+          className="px-4 sm:px-6 lg:px-10 py-20 max-w-shell mx-auto border-t border-white/[0.05]"
+        >
           <div className="max-w-2xl">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-indigo-300 font-medium">
-              The core engine
-            </div>
-            <h2 className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight">
+            <Eyebrow index="01" label="The core engine" />
+            <h2 className="mt-4 font-display font-bold text-display-lg tracking-tightest">
               Everything you need. Nothing you shouldn&apos;t use.
             </h2>
-            <p className="mt-3 text-zinc-400">
+            <p className="mt-4 text-zinc-400 leading-relaxed">
               We deliberately don&apos;t ship Google-dork scraping or LinkedIn
               harvesting. Every feature here is something you can use against
               your own list and ship a compliant marketing operation on top of.
             </p>
           </div>
-          <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {FEATURES.map(({ icon: Icon, title, body }) => (
-              <div
+          <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {FEATURES.map(({ icon: Icon, title, body }, i) => (
+              <motion.div
                 key={title}
-                className="rounded-2xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] p-5 transition-colors"
+                custom={i}
+                variants={reveal}
+                className="surface-card-soft p-5 sm:p-6 group transition-colors hover:bg-ink-100/80 hover:border-white/[0.10] relative overflow-hidden"
               >
-                <div className="w-9 h-9 rounded-xl bg-indigo-500/10 ring-1 ring-indigo-500/30 grid place-items-center">
-                  <Icon className="w-4.5 h-4.5 text-indigo-300" />
+                <div
+                  className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-lime/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-hidden
+                />
+                <div className="w-10 h-10 rounded-xl bg-lime/[0.10] ring-1 ring-lime/30 grid place-items-center">
+                  <Icon className="w-4.5 h-4.5 text-lime" aria-hidden />
                 </div>
-                <div className="mt-4 text-base font-semibold text-zinc-100">
+                <div className="mt-5 font-display text-lg font-semibold text-white tracking-tighter">
                   {title}
                 </div>
                 <p className="mt-2 text-sm text-zinc-400 leading-relaxed">
                   {body}
                 </p>
-              </div>
+              </motion.div>
             ))}
           </div>
-        </section>
+        </motion.section>
 
         {/* How it works */}
-        <section
+        <motion.section
           id="how-it-works"
-          className="px-6 lg:px-10 py-16 max-w-6xl mx-auto border-t border-white/5"
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.15 }}
+          variants={reveal}
+          className="px-4 sm:px-6 lg:px-10 py-20 max-w-shell mx-auto border-t border-white/[0.05]"
         >
           <div className="max-w-2xl">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-300 font-medium">
-              How it works
-            </div>
-            <h2 className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight">
+            <Eyebrow index="02" label="How it works" />
+            <h2 className="mt-4 font-display font-bold text-display-lg tracking-tightest">
               Three steps. Zero friction.
             </h2>
           </div>
-          <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-4">
-            {HOW_IT_WORKS.map(({ icon: Icon, title, body }) => (
-              <div
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-4">
+            {HOW_IT_WORKS.map(({ icon: Icon, title, body }, i) => (
+              <motion.div
                 key={title}
-                className="rounded-2xl border border-white/5 bg-white/[0.02] p-5"
+                custom={i}
+                variants={reveal}
+                className="surface-card-soft p-6 relative"
               >
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/30 grid place-items-center">
-                  <Icon className="w-4.5 h-4.5 text-emerald-300" />
+                <span className="absolute top-5 right-5 font-mono text-[11px] uppercase tracking-[0.18em] text-zinc-600">
+                  /{String(i + 1).padStart(2, "0")}
+                </span>
+                <div className="w-10 h-10 rounded-xl bg-lime/[0.10] ring-1 ring-lime/30 grid place-items-center">
+                  <Icon className="w-4.5 h-4.5 text-lime" aria-hidden />
                 </div>
-                <div className="mt-4 text-base font-semibold text-zinc-100">
+                <div className="mt-5 font-display text-lg font-semibold text-white tracking-tighter">
                   {title}
                 </div>
                 <p className="mt-2 text-sm text-zinc-400 leading-relaxed">
                   {body}
                 </p>
-              </div>
+              </motion.div>
             ))}
           </div>
-        </section>
+        </motion.section>
 
         {/* Open Source */}
-        <section
+        <motion.section
           id="open-source"
-          className="px-6 lg:px-10 py-16 max-w-6xl mx-auto border-t border-white/5"
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.1 }}
+          variants={reveal}
+          className="px-4 sm:px-6 lg:px-10 py-20 max-w-shell mx-auto border-t border-white/[0.05]"
         >
-          <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-indigo-500/10 via-violet-500/5 to-transparent p-7 sm:p-10">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div className="rounded-3xl border border-lime/20 bg-gradient-to-br from-lime/[0.06] via-ink-100/0 to-transparent p-7 sm:p-10 relative overflow-hidden">
+            <div
+              className="pointer-events-none absolute -top-32 -right-32 h-80 w-80 rounded-full bg-lime/10 blur-3xl"
+              aria-hidden
+            />
+            <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
               <div className="max-w-xl">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-violet-300 font-medium">
-                  Open source · MIT licensed
-                </div>
-                <h2 className="mt-2 text-3xl font-semibold tracking-tight">
+                <Eyebrow index="03" label="Open source · MIT licensed" />
+                <h2 className="mt-4 font-display font-bold text-display-md tracking-tightest">
                   Audit it. Self-host it. Ship it.
                 </h2>
-                <p className="mt-3 text-zinc-400">
+                <p className="mt-4 text-zinc-400 leading-relaxed">
                   No black box. Every line of the verifier engine, the auth
                   layer, and the deployment configs (Vercel + Azure VPS + Fly +
                   Render + Docker) is on GitHub. Pull requests welcome.
                 </p>
               </div>
-              <div className="flex flex-col gap-2 lg:items-end">
+              <div className="flex flex-col gap-3 sm:flex-row lg:flex-col lg:items-end">
                 <a
                   href={GITHUB_REPO}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-2 text-sm font-medium text-white border border-white/10 hover:bg-white/5 px-5 py-3 rounded-xl"
+                  className="btn-ghost text-sm"
                 >
-                  <Github className="w-4 h-4" /> View source on GitHub
+                  <Github className="w-4 h-4" aria-hidden /> View source on GitHub
                 </a>
-                <Link
-                  to="/signup"
-                  className="inline-flex items-center gap-2 text-sm font-medium text-white bg-gradient-to-br from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 px-5 py-3 rounded-xl shadow-lg shadow-indigo-500/20"
-                >
-                  Try the live demo <ArrowRight className="w-4 h-4" />
+                <Link to="/signup" className="btn-primary text-sm">
+                  Try the live demo <ArrowRight className="w-4 h-4" aria-hidden />
                 </Link>
               </div>
             </div>
-            <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="relative mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {PRINCIPLES.map(({ icon: Icon, title, body }) => (
                 <div key={title} className="space-y-2">
                   <div className="flex items-center gap-2 text-sm font-medium text-zinc-100">
-                    <Icon className="w-4 h-4 text-violet-300" />
+                    <Icon className="w-4 h-4 text-lime" aria-hidden />
                     {title}
                   </div>
                   <p className="text-xs text-zinc-400 leading-relaxed">
@@ -374,118 +446,90 @@ export function LandingPage() {
               ))}
             </div>
           </div>
-        </section>
+        </motion.section>
 
-        {/* Author / Trust strip */}
-        <section className="px-6 lg:px-10 py-12 max-w-6xl mx-auto border-t border-white/5">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="text-sm text-zinc-300">
-                Built and maintained by{" "}
-                <a
-                  href={PORTFOLIO_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-medium text-white hover:text-indigo-200"
-                >
-                  Delowar Hossain
-                </a>
-              </div>
-              <div className="text-xs text-zinc-500">
-                Independent developer · Bangladesh
-              </div>
+        {/* Final CTA */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.2 }}
+          variants={reveal}
+          className="px-4 sm:px-6 lg:px-10 py-16 max-w-shell mx-auto"
+        >
+          <div className="rounded-3xl border border-white/[0.06] bg-ink-100/70 backdrop-blur p-8 sm:p-14 flex flex-col items-center text-center relative overflow-hidden">
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-lime to-transparent"
+              aria-hidden
+            />
+            <Eyebrow index="04" label="Last step" />
+            <h2 className="mt-5 font-display font-bold text-display-lg sm:text-display-xl tracking-tightest max-w-3xl">
+              Ready to clean a list?
+            </h2>
+            <p className="mt-4 text-sm sm:text-base text-zinc-400 max-w-md">
+              Sign up free with Google, GitHub, or email. No credit card. No
+              trial timer. Self-hosted under your domain when you&apos;re
+              ready.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <Link to="/signup" className="btn-primary text-sm">
+                Create account <ArrowRight className="w-4 h-4" aria-hidden />
+              </Link>
+              <Link to="/login" className="btn-ghost text-sm">
+                Sign in
+              </Link>
             </div>
-            <div className="flex items-center gap-3 text-sm">
+            <div className="mt-6 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+              <CheckCircle2 className="w-3 h-3 text-lime" aria-hidden />
+              No scraping · No spam tooling · MIT licensed
+            </div>
+          </div>
+        </motion.section>
+
+        <footer className="px-4 sm:px-6 lg:px-10 py-10 border-t border-white/[0.05] max-w-shell mx-auto">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="font-mono uppercase tracking-[0.18em] text-zinc-500">
+              © {new Date().getFullYear()} Delowar Hossain · MIT License
+            </div>
+            <div className="flex items-center gap-4 text-zinc-500">
+              <Link to="/login" className="hover:text-lime transition-colors">
+                Sign in
+              </Link>
+              <Link to="/signup" className="hover:text-lime transition-colors">
+                Sign up
+              </Link>
               <a
-                href={PORTFOLIO_URL}
+                href={GITHUB_REPO}
                 target="_blank"
                 rel="noreferrer"
-                className="text-zinc-300 hover:text-white inline-flex items-center gap-1.5"
+                className="hover:text-lime transition-colors"
               >
-                <Globe className="w-4 h-4" />
-                Portfolio
+                GitHub
               </a>
               <a
                 href={GITHUB_PROFILE}
                 target="_blank"
                 rel="noreferrer"
-                className="text-zinc-300 hover:text-white inline-flex items-center gap-1.5"
+                className="hover:text-lime transition-colors"
               >
-                <Github className="w-4 h-4" />
                 @mdhossain-2437
               </a>
-            </div>
-          </div>
-        </section>
-
-        {/* Final CTA */}
-        <section className="px-6 lg:px-10 pt-6 pb-20 max-w-6xl mx-auto">
-          <div className="rounded-3xl border border-white/10 bg-[#0e1020]/60 backdrop-blur p-8 sm:p-12 flex flex-col items-center text-center">
-            <Database className="w-9 h-9 text-indigo-300" />
-            <h2 className="mt-4 text-2xl sm:text-3xl font-semibold tracking-tight">
-              Ready to clean a list?
-            </h2>
-            <p className="mt-2 text-sm text-zinc-400 max-w-md">
-              Sign up free with Google, GitHub, or email. No credit card. No
-              trial timer. Self-hosted under your domain when you&apos;re
-              ready.
-            </p>
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-              <Link
-                to="/signup"
-                className="inline-flex items-center gap-2 text-sm font-medium text-white bg-gradient-to-br from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 px-5 py-3 rounded-xl shadow-lg shadow-indigo-500/20"
+              <a
+                href={PORTFOLIO_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-lime transition-colors"
               >
-                Create account <ArrowRight className="w-4 h-4" />
-              </Link>
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-2 text-sm font-medium text-zinc-200 border border-white/10 hover:bg-white/5 px-5 py-3 rounded-xl"
+                Portfolio
+              </a>
+              <a
+                href="/docs"
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-lime transition-colors inline-flex items-center gap-1"
               >
-                Sign in
-              </Link>
+                API docs
+              </a>
             </div>
-            <div className="mt-5 flex items-center gap-2 text-[11px] text-zinc-500">
-              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-              No scraping · No spam tooling · MIT licensed
-            </div>
-          </div>
-        </section>
-
-        <footer className="px-6 lg:px-10 py-8 border-t border-white/5 text-xs text-zinc-500 flex flex-wrap items-center justify-between gap-3 max-w-6xl mx-auto">
-          <div>
-            © {new Date().getFullYear()} Delowar Hossain · MIT License
-          </div>
-          <div className="flex items-center gap-4">
-            <Link to="/login" className="hover:text-zinc-300">
-              Sign in
-            </Link>
-            <Link to="/signup" className="hover:text-zinc-300">
-              Sign up
-            </Link>
-            <a
-              href={GITHUB_REPO}
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-zinc-300"
-            >
-              GitHub
-            </a>
-            <a
-              href={PORTFOLIO_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-zinc-300"
-            >
-              Portfolio
-            </a>
-            <a
-              href="/docs"
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-zinc-300 inline-flex items-center gap-1"
-            >
-              <Shield className="w-3 h-3" /> API docs
-            </a>
           </div>
         </footer>
       </div>

@@ -146,25 +146,25 @@ export function AuthForm({
     mode === "signin" ? "Sign in with email" : "Create account";
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center px-4 py-10 text-zinc-100">
-      <div className="absolute inset-0 bg-grid pointer-events-none" />
+    <div className="relative min-h-screen flex items-center justify-center px-4 py-10 text-zinc-100 bg-ink">
+      <div className="absolute inset-0 bg-grid pointer-events-none opacity-60" />
       <div className="absolute inset-0 bg-glow pointer-events-none" />
 
       <Link
         to="/"
-        className="absolute top-5 left-5 inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-100"
+        className="absolute top-5 left-5 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-zinc-400 hover:text-lime transition-colors min-h-[44px] px-2"
       >
-        <ArrowLeft className="w-3.5 h-3.5" /> Back to home
+        <ArrowLeft className="w-3.5 h-3.5" aria-hidden /> Back home
       </Link>
 
-      <div className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[#0e1020]/80 backdrop-blur-xl shadow-2xl p-7 space-y-6">
-        <header className="space-y-2 text-center">
-          <div className="mx-auto w-12 h-12 rounded-xl bg-indigo-500/15 border border-indigo-400/30 flex items-center justify-center">
-            <ShieldCheck className="w-6 h-6 text-indigo-300" />
+      <div className="relative w-full max-w-md surface-card p-7 sm:p-8 space-y-6">
+        <header className="space-y-3 text-center">
+          <div className="mx-auto w-12 h-12 rounded-2xl bg-lime shadow-glow flex items-center justify-center text-ink">
+            <ShieldCheck className="w-6 h-6" strokeWidth={2.4} aria-hidden />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="font-display text-display-sm font-bold tracking-tightest text-white">{title}</h1>
           {subtitle && (
-            <p className="text-sm text-zinc-400">{subtitle}</p>
+            <p className="text-sm text-zinc-400 leading-relaxed">{subtitle}</p>
           )}
         </header>
 
@@ -172,10 +172,10 @@ export function AuthForm({
           <button
             onClick={runGoogle}
             disabled={busy !== null}
-            className="flex items-center justify-center gap-3 w-full rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium px-4 py-2.5 transition"
+            className="btn-ghost text-sm w-full"
           >
             {busy === "google" ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
             ) : (
               <GoogleMark />
             )}
@@ -184,27 +184,27 @@ export function AuthForm({
           <button
             onClick={runGithub}
             disabled={busy !== null}
-            className="flex items-center justify-center gap-3 w-full rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium px-4 py-2.5 transition"
+            className="btn-ghost text-sm w-full"
           >
             {busy === "github" ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
             ) : (
-              <Github className="w-4 h-4" />
+              <Github className="w-4 h-4" aria-hidden />
             )}
             Continue with GitHub
           </button>
         </div>
 
-        <div className="relative flex items-center gap-3 text-xs text-zinc-500">
+        <div className="relative flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
           <span className="flex-1 h-px bg-white/10" />
           <span>or</span>
           <span className="flex-1 h-px bg-white/10" />
         </div>
 
-        <form onSubmit={runEmail} className="space-y-3">
+        <form onSubmit={runEmail} className="space-y-4">
           {mode === "signup" && (
-            <div className="space-y-1">
-              <label htmlFor="auth-name" className="text-xs text-zinc-400">
+            <div className="space-y-1.5">
+              <label htmlFor="auth-name" className="font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-400">
                 Name
               </label>
               <input
@@ -213,13 +213,13 @@ export function AuthForm({
                 autoComplete="name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-white/5 focus:bg-white/10 focus:border-indigo-400/40 outline-none text-sm px-3 py-2"
+                className="input"
                 placeholder="Delowar Hossain"
               />
             </div>
           )}
-          <div className="space-y-1">
-            <label htmlFor="auth-email" className="text-xs text-zinc-400">
+          <div className="space-y-1.5">
+            <label htmlFor="auth-email" className="font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-400">
               Email
             </label>
             <input
@@ -229,12 +229,12 @@ export function AuthForm({
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-white/5 focus:bg-white/10 focus:border-indigo-400/40 outline-none text-sm px-3 py-2"
+              className="input"
               placeholder="you@example.com"
             />
           </div>
-          <div className="space-y-1">
-            <label htmlFor="auth-pass" className="text-xs text-zinc-400">
+          <div className="space-y-1.5">
+            <label htmlFor="auth-pass" className="font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-400">
               Password
             </label>
             <input
@@ -247,7 +247,7 @@ export function AuthForm({
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-white/5 focus:bg-white/10 focus:border-indigo-400/40 outline-none text-sm px-3 py-2"
+              className="input"
               placeholder={
                 mode === "signin"
                   ? "Your password"
@@ -258,12 +258,12 @@ export function AuthForm({
           <button
             type="submit"
             disabled={busy !== null}
-            className="flex items-center justify-center gap-2 w-full rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2.5 transition"
+            className="btn-primary text-sm w-full"
           >
             {busy === "email" ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
             ) : (
-              <Mail className="w-4 h-4" />
+              <Mail className="w-4 h-4" aria-hidden />
             )}
             {submitLabel}
           </button>
@@ -282,7 +282,7 @@ export function AuthForm({
               No account?{" "}
               <Link
                 to={switchHref}
-                className="text-indigo-300 hover:text-indigo-200"
+                className="text-lime hover:text-lime-300 font-medium transition-colors"
               >
                 {switchLabel}
               </Link>
@@ -292,7 +292,7 @@ export function AuthForm({
               Already have an account?{" "}
               <Link
                 to={switchHref}
-                className="text-indigo-300 hover:text-indigo-200"
+                className="text-lime hover:text-lime-300 font-medium transition-colors"
               >
                 {switchLabel}
               </Link>

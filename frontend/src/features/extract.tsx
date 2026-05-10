@@ -71,7 +71,7 @@ export function ExtractTab({
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Paste any text - emails, raw HTML, log files. Supports patterns like 'name [at] example [dot] com'."
-            className="w-full h-56 rounded-xl border border-zinc-700 bg-zinc-900/40 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-500 font-mono resize-none focus:border-indigo-500"
+            className="w-full h-56 rounded-xl border border-white/[0.08] bg-ink/40 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-500 font-mono resize-none focus:border-lime/40"
           />
           <div className="flex flex-wrap items-center gap-2">
             <PrimaryButton onClick={run} disabled={loading || !text.trim()} icon={Sparkles}>
@@ -111,7 +111,7 @@ export function ExtractTab({
       )}
 
       {emails.length > 0 && (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+        <div className="rounded-xl border border-white/[0.06] bg-ink-100/60 p-4">
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <div className="text-sm text-zinc-300">
               Found <span className="font-semibold text-white">{emails.length}</span> unique email
@@ -138,7 +138,7 @@ export function ExtractTab({
               </GhostButton>
             </div>
           </div>
-          <div className="max-h-72 overflow-auto rounded-lg border border-zinc-800 bg-black/30 p-3 font-mono text-xs leading-relaxed">
+          <div className="max-h-72 overflow-auto rounded-lg border border-white/[0.06] bg-black/30 p-3 font-mono text-xs leading-relaxed">
             {emails.map((e) => (
               <div key={e} className="text-zinc-200">
                 {e}

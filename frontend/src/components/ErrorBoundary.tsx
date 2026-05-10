@@ -98,7 +98,7 @@ export class ErrorBoundary extends Component<
           <div className="flex gap-2">
             <button
               onClick={this.handleReset}
-              className="rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium px-3 py-2"
+              className="rounded-lg bg-lime hover:bg-lime-300 text-ink text-sm font-semibold px-3 py-2"
             >
               Reload panel
             </button>
@@ -114,28 +114,30 @@ export class ErrorBoundary extends Component<
     }
 
     return (
-      <div className="min-h-screen flex items-center justify-center px-6 py-12 bg-[#0b0d18] text-zinc-100">
-        <div className="max-w-md rounded-2xl border border-rose-500/30 bg-rose-500/5 p-6 space-y-4">
-          <div className="flex items-center gap-2 text-rose-200 font-semibold">
-            <AlertTriangle className="w-5 h-5" /> Something broke in the UI
+      <div className="min-h-screen flex items-center justify-center px-6 py-12 bg-ink text-zinc-100">
+        <div className="max-w-md surface-card border-rose-500/30 bg-rose-500/[0.06] p-7 space-y-4">
+          <div className="flex items-center gap-2 font-display font-semibold text-rose-200 tracking-tight">
+            <AlertTriangle className="w-5 h-5" aria-hidden /> Something broke in the UI
           </div>
-          <p className="text-sm text-zinc-300">
+          <p className="text-sm text-zinc-300 leading-relaxed">
             One panel crashed but the API and the rest of the app are still
             healthy. Try the action again — your jobs and data are not lost.
           </p>
-          <pre className="text-[11px] leading-snug text-rose-200/80 bg-black/30 rounded p-3 max-h-40 overflow-auto whitespace-pre-wrap">
+          <pre className="text-[11px] leading-snug text-rose-200/80 bg-black/30 rounded-lg p-3 max-h-40 overflow-auto whitespace-pre-wrap font-mono">
             {error.message}
           </pre>
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={this.handleReset}
-              className="rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium px-3 py-2"
+              className="btn-primary text-sm"
             >
               Reload panel
             </button>
             <button
+              type="button"
               onClick={() => window.location.reload()}
-              className="rounded-lg border border-white/10 hover:bg-white/5 text-zinc-200 text-sm px-3 py-2"
+              className="btn-ghost-sm text-sm"
             >
               Hard refresh
             </button>

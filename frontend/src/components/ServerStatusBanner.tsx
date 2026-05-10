@@ -126,11 +126,11 @@ export function ServerStatusBanner() {
   if (kind === "primary-ok") {
     if (recoveredAt) {
       return (
-        <div className="sticky top-0 z-30 border-b border-emerald-400/30 bg-emerald-500/10 backdrop-blur-md text-emerald-100">
-          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-2 text-xs">
-            <CheckCircle2 className="w-4 h-4" />
-            <span className="font-semibold">Primary server restored</span>
-            <span className="text-emerald-200/80">
+        <div className="sticky top-0 z-30 border-b border-lime/30 bg-lime/[0.08] backdrop-blur-md text-lime">
+          <div className="max-w-shell mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex items-center gap-2 text-xs">
+            <CheckCircle2 className="w-4 h-4" aria-hidden />
+            <span className="font-mono uppercase tracking-[0.16em] font-semibold">Primary server restored</span>
+            <span className="text-lime/80">
               All bulk endpoints are back. You can resume large jobs.
             </span>
           </div>
@@ -147,9 +147,9 @@ export function ServerStatusBanner() {
     <div
       className={`sticky top-0 z-30 border-b ${style.border} ${style.bg} backdrop-blur-md ${style.text}`}
     >
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-2 flex flex-wrap items-center gap-3 text-xs">
-        <span className="inline-flex items-center gap-1.5 font-semibold">
-          <Icon className="w-4 h-4" />
+      <div className="max-w-shell mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center gap-3 text-xs">
+        <span className="inline-flex items-center gap-1.5 font-mono uppercase tracking-[0.16em] font-semibold">
+          <Icon className="w-4 h-4" aria-hidden />
           {style.title}
         </span>
         <span className="opacity-80">{style.body(status)}</span>
@@ -165,12 +165,12 @@ export function ServerStatusBanner() {
             }
           }}
           disabled={retrying}
-          className={`ml-auto inline-flex items-center gap-1.5 rounded-md border ${style.border} bg-white/5 hover:bg-white/10 disabled:opacity-60 px-2.5 py-1 transition`}
+          className={`ml-auto inline-flex items-center gap-1.5 rounded-full border ${style.border} bg-white/5 hover:bg-white/10 disabled:opacity-60 px-3 py-1.5 min-h-[32px] font-mono uppercase tracking-[0.14em] text-[10px] transition focus-visible:outline-2 focus-visible:outline-lime focus-visible:outline-offset-2`}
         >
           {retrying ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />
           ) : (
-            <Activity className="w-3.5 h-3.5" />
+            <Activity className="w-3.5 h-3.5" aria-hidden />
           )}
           Try primary again
         </button>

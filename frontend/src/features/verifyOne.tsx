@@ -38,7 +38,7 @@ export function VerifyOneTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+      <div className="rounded-xl border border-white/[0.06] bg-ink-100/60 p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-[260px]">
             <label className="text-xs uppercase tracking-wider text-zinc-500">Email address</label>
@@ -47,7 +47,7 @@ export function VerifyOneTab() {
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && run()}
               placeholder="alice@example.com"
-              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-100 font-mono focus:border-indigo-500"
+              className="input mt-1 font-mono"
             />
           </div>
           <PrimaryButton onClick={run} disabled={loading || !email.trim()} icon={ShieldCheck}>
@@ -77,7 +77,7 @@ export function VerifyOneTab() {
       )}
 
       {result && (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-4">
+        <div className="rounded-xl border border-white/[0.06] bg-ink-100/60 p-4 space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
               {result.gravatar_url && (
@@ -87,7 +87,7 @@ export function VerifyOneTab() {
                     (e.target as HTMLImageElement).style.display = "none";
                   }}
                   alt=""
-                  className="w-10 h-10 rounded-full border border-zinc-700"
+                  className="w-10 h-10 rounded-full border border-white/[0.08]"
                 />
               )}
               <div>

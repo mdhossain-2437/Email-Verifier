@@ -99,7 +99,7 @@ export function SettingsPage() {
         {/* Verifier defaults */}
         <div className="lg:col-span-2 rounded-2xl border border-white/5 bg-white/[0.02] p-6 space-y-5">
           <div className="flex items-center gap-2">
-            <SettingsIcon className="w-4 h-4 text-indigo-300" />
+            <SettingsIcon className="w-4 h-4 text-lime" />
             <div className="text-sm font-medium text-zinc-100">
               Verifier defaults
             </div>
@@ -159,7 +159,7 @@ export function SettingsPage() {
                   ),
                 }))
               }
-              className="w-32 rounded-lg border border-white/10 bg-white/5 focus:bg-white/10 focus:border-indigo-400/40 outline-none px-3 py-2 tabular-nums"
+              className="w-32 rounded-lg border border-white/10 bg-white/5 focus:bg-white/10 focus:border-lime/40 outline-none px-3 py-2 tabular-nums"
             />
             <p className="text-[11px] text-zinc-500">
               How many emails to verify in parallel per job. 16 is a safe
@@ -172,7 +172,7 @@ export function SettingsPage() {
               type="button"
               onClick={onSave}
               disabled={saving || !user}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 transition"
+              className="inline-flex items-center gap-2 rounded-lg bg-lime hover:bg-lime-300 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 transition"
             >
               {saving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -189,7 +189,7 @@ export function SettingsPage() {
               <RotateCcw className="w-4 h-4" /> Reset to defaults
             </button>
             {savedAt && (
-              <span className="inline-flex items-center gap-1.5 text-xs text-emerald-300">
+              <span className="inline-flex items-center gap-1.5 text-xs text-lime">
                 <CheckCircle2 className="w-3.5 h-3.5" /> Saved
               </span>
             )}
@@ -200,7 +200,7 @@ export function SettingsPage() {
         <div className="space-y-6">
           <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-3">
             <div className="flex items-center gap-2 text-sm font-medium text-zinc-100">
-              <Sparkles className="w-4 h-4 text-emerald-300" />
+              <Sparkles className="w-4 h-4 text-lime" />
               Quick links
             </div>
             <Link
@@ -257,7 +257,7 @@ function Toggle({
         type="button"
         onClick={() => onChange(!value)}
         className={`mt-0.5 w-9 h-5 rounded-full p-0.5 transition-colors flex-shrink-0 ${
-          value ? "bg-indigo-500" : "bg-zinc-700"
+          value ? "bg-lime" : "bg-zinc-700"
         }`}
         aria-pressed={value}
       >

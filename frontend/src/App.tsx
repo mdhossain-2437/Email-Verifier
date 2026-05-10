@@ -29,6 +29,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { Github, Globe, Loader2 } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 
 import "./App.css";
 import {
@@ -124,35 +125,29 @@ export default function App() {
 /** Landing page for visitors; redirect to /app if already signed in. */
 function HomeRoute() {
   const { user, ready } = useAuth();
-  if (!ready) {
-    return (
-      <div className="relative min-h-screen flex items-center justify-center text-zinc-100">
-        <div className="absolute inset-0 bg-grid pointer-events-none" />
-        <div className="absolute inset-0 bg-glow pointer-events-none" />
-        <div className="relative flex items-center gap-2 text-sm text-zinc-400">
-          <Loader2 className="w-4 h-4 animate-spin" /> Loading…
-        </div>
-      </div>
-    );
-  }
+  if (!ready) return <BrandLoading />;
   if (user) return <Navigate to="/app" replace />;
   return <LandingPage />;
+}
+
+/** Brand-aware loading splash. Used on auth-ready checks. */
+function BrandLoading() {
+  return (
+    <div className="relative min-h-screen flex items-center justify-center bg-ink text-zinc-100">
+      <div className="absolute inset-0 bg-grid pointer-events-none" />
+      <div className="absolute inset-0 bg-glow pointer-events-none" />
+      <div className="relative flex items-center gap-3 text-sm text-zinc-400">
+        <Loader2 className="w-4 h-4 animate-spin text-lime" />
+        <span className="font-mono uppercase tracking-[0.18em] text-[11px]">Loading…</span>
+      </div>
+    </div>
+  );
 }
 
 /** Wraps a public route so signed-in users get bounced to /app. */
 function PublicOnly({ children }: { children: ReactNode }) {
   const { user, ready } = useAuth();
-  if (!ready) {
-    return (
-      <div className="relative min-h-screen flex items-center justify-center text-zinc-100">
-        <div className="absolute inset-0 bg-grid pointer-events-none" />
-        <div className="absolute inset-0 bg-glow pointer-events-none" />
-        <div className="relative flex items-center gap-2 text-sm text-zinc-400">
-          <Loader2 className="w-4 h-4 animate-spin" /> Loading…
-        </div>
-      </div>
-    );
-  }
+  if (!ready) return <BrandLoading />;
   if (user) return <Navigate to="/app" replace />;
   return <>{children}</>;
 }
@@ -245,8 +240,21 @@ function AppShell() {
     about: { title: "About", subtitle: "" },
   };
 
+  // Editorial eyebrow captions per tab — drives the monospace "/01 — …"
+  // header glyphs that anchor the awwwards-style page reveals.
+  const eyebrows: Partial<Record<Tab, string>> = {
+    "verify-bulk": "/ 02 — Verify · bulk",
+    "lead-finder": "/ 03 — Discover",
+    extract: "/ 04 — Extract",
+    "verify-one": "/ 05 — Inspect",
+    keys: "/ 06 — Access",
+    api: "/ 07 — Develop",
+    about: "/ 08 — About",
+  };
+
   return (
     <ErrorBoundary>
+    <a href="#main" className="skip-link">Skip to content</a>
     <div className="relative min-h-screen text-zinc-100">
       <div className="absolute inset-0 bg-grid pointer-events-none" />
       <div className="absolute inset-0 bg-glow pointer-events-none" />
@@ -271,7 +279,21 @@ function AppShell() {
             user={userInfo}
           />
 
-          <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-[1400px] w-full mx-auto">
+          <main
+            id="main"
+            className="flex-1 px-4 sm:px-6 lg:px-10 py-6 sm:py-10 max-w-shell w-full mx-auto"
+          >
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={tab}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{
+                  duration: 0.32,
+                  ease: [0.2, 0.8, 0.2, 1] as [number, number, number, number],
+                }}
+              >
             <Suspense fallback={<RouteFallback />}>
               <PanelErrorBoundary name={titles[tab].title} resetKey={tab}>
               {tab === "command-center" && (
@@ -280,12 +302,13 @@ function AppShell() {
               {tab === "verify-bulk" && (
                 <div className="space-y-6">
                   <PageHeader
+                    eyebrow={eyebrows[tab]}
                     title={titles[tab].title}
                     subtitle={titles[tab].subtitle}
                     cta={
-                      <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-soft" />
-                        Engine ready
+                      <span className="inline-flex items-center gap-2 rounded-full border border-lime/40 bg-lime/[0.08] px-3 py-1.5 text-xs font-mono text-lime-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-lime pulse-soft" />
+                        ENGINE READY
                       </span>
                     }
                   />
@@ -295,7 +318,7 @@ function AppShell() {
               {tab === "lead-finder" && <LeadFinderView />}
               {tab === "extract" && (
                 <div className="space-y-6">
-                  <PageHeader title={titles[tab].title} subtitle={titles[tab].subtitle} />
+                  <PageHeader eyebrow={eyebrows[tab]} title={titles[tab].title} subtitle={titles[tab].subtitle} />
                   <ExtractTab
                     meta={meta}
                     onResults={(emails) => {
@@ -307,20 +330,20 @@ function AppShell() {
               )}
               {tab === "verify-one" && (
                 <div className="space-y-6">
-                  <PageHeader title={titles[tab].title} subtitle={titles[tab].subtitle} />
+                  <PageHeader eyebrow={eyebrows[tab]} title={titles[tab].title} subtitle={titles[tab].subtitle} />
                   <VerifyOneTab />
                 </div>
               )}
               {tab === "tools" && <ToolsMarketplaceView onGo={setTab} />}
               {tab === "keys" && (
                 <div className="space-y-6">
-                  <PageHeader title={titles[tab].title} subtitle={titles[tab].subtitle} />
+                  <PageHeader eyebrow={eyebrows[tab]} title={titles[tab].title} subtitle={titles[tab].subtitle} />
                   <ApiKeysView />
                 </div>
               )}
               {tab === "api" && (
                 <div className="space-y-6">
-                  <PageHeader title={titles[tab].title} subtitle={titles[tab].subtitle} />
+                  <PageHeader eyebrow={eyebrows[tab]} title={titles[tab].title} subtitle={titles[tab].subtitle} />
                   <ApiTab />
                 </div>
               )}
@@ -328,44 +351,46 @@ function AppShell() {
               {tab === "settings" && <SettingsPage />}
               {tab === "about" && (
                 <div className="space-y-6">
-                  <PageHeader title={titles[tab].title} subtitle={titles[tab].subtitle} />
+                  <PageHeader eyebrow={eyebrows[tab]} title={titles[tab].title} subtitle={titles[tab].subtitle} />
                   <AboutTab meta={meta} />
                 </div>
               )}
               </PanelErrorBoundary>
             </Suspense>
+              </motion.div>
+            </AnimatePresence>
           </main>
 
-          <footer className="border-t border-white/5 px-6 py-4 text-xs text-zinc-500 flex flex-wrap items-center justify-between gap-3">
-            <div>
+          <footer className="border-t border-white/[0.05] px-4 sm:px-6 py-6 text-xs text-zinc-500 flex flex-wrap items-center justify-between gap-3">
+            <div className="font-mono uppercase tracking-[0.16em] text-[10px]">
               Created by{" "}
               <a
                 href={PORTFOLIO_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="text-zinc-300 hover:text-white"
+                className="text-lime hover:text-lime-300 transition-colors"
               >
                 Delowar Hossain
               </a>{" "}
-              · MIT-spirited · bug reports and PRs welcome.
+              · MIT licensed · bug reports & PRs welcome.
             </div>
             <div className="flex items-center gap-4">
               <a
                 href={PORTFOLIO_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 hover:text-zinc-300"
+                className="inline-flex items-center gap-1.5 hover:text-lime transition-colors"
               >
-                <Globe className="w-3 h-3" />
+                <Globe className="w-3 h-3" aria-hidden />
                 Portfolio
               </a>
               <a
-                href="https://github.com/mdhossain-2437"
+                href="https://github.com/mdhossain-2437/Email-Verifier"
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 hover:text-zinc-300"
+                className="inline-flex items-center gap-1.5 hover:text-lime transition-colors"
               >
-                <Github className="w-3 h-3" />
+                <Github className="w-3 h-3" aria-hidden />
                 GitHub
               </a>
             </div>

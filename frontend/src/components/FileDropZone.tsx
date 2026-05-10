@@ -42,12 +42,12 @@ export function FileDropZone({
       }}
       className={`flex flex-col items-center justify-center gap-2 h-44 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
         dragOver
-          ? "border-indigo-400 bg-indigo-500/10"
-          : "border-zinc-700 bg-zinc-900/30 hover:border-zinc-500"
+          ? "border-lime bg-lime/[0.08]"
+          : "border-white/[0.08] bg-ink/30 hover:border-white/[0.16]"
       }`}
     >
       {busy ? (
-        <Spinner className="w-7 h-7 text-indigo-300" />
+        <Spinner className="w-7 h-7 text-lime" />
       ) : (
         <Upload className="w-7 h-7 text-zinc-400" />
       )}

@@ -25,19 +25,19 @@ export function FirebaseConfigGate({ children }: { children: ReactNode }) {
   const { configured } = useAuth();
   if (configured) return <>{children}</>;
   return (
-    <div className="relative min-h-screen flex items-center justify-center px-4 py-10 text-zinc-100">
-      <div className="absolute inset-0 bg-grid pointer-events-none" />
+    <div className="relative min-h-screen flex items-center justify-center px-4 py-10 text-zinc-100 bg-ink">
+      <div className="absolute inset-0 bg-grid pointer-events-none opacity-60" />
       <div className="absolute inset-0 bg-glow pointer-events-none" />
-      <div className="relative max-w-md rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6 space-y-3 text-sm">
-        <div className="flex items-center gap-2 text-amber-200 font-semibold">
-          <Settings className="w-5 h-5" /> Firebase setup required
+      <div className="relative max-w-md rounded-2xl border border-amber-400/30 bg-amber-400/[0.06] p-7 space-y-3 text-sm">
+        <div className="flex items-center gap-2 text-amber-200 font-display font-semibold tracking-tight">
+          <Settings className="w-5 h-5" aria-hidden /> Firebase setup required
         </div>
-        <p className="text-zinc-300">
-          This deployment doesn't have <code>VITE_FIREBASE_*</code> values in
-          its <code>frontend/.env</code>. The app refuses to render until
+        <p className="text-zinc-300 leading-relaxed">
+          This deployment doesn't have <code className="font-mono text-lime">VITE_FIREBASE_*</code> values in
+          its <code className="font-mono text-lime">frontend/.env</code>. The app refuses to render until
           sign-in is configured, so no data is exposed.
         </p>
-        <p className="text-zinc-400 text-xs">
+        <p className="text-zinc-400 text-xs leading-relaxed">
           Add the six fields from Firebase Console → Project settings → Your
           apps → Web app, then rebuild the frontend.
         </p>
@@ -52,11 +52,12 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   if (!ready) {
     return (
-      <div className="relative min-h-screen flex items-center justify-center text-zinc-100">
-        <div className="absolute inset-0 bg-grid pointer-events-none" />
+      <div className="relative min-h-screen flex items-center justify-center text-zinc-100 bg-ink">
+        <div className="absolute inset-0 bg-grid pointer-events-none opacity-60" />
         <div className="absolute inset-0 bg-glow pointer-events-none" />
-        <div className="relative flex items-center gap-2 text-sm text-zinc-400">
-          <Loader2 className="w-4 h-4 animate-spin" /> Loading session…
+        <div className="relative flex items-center gap-3 text-sm text-zinc-400">
+          <Loader2 className="w-4 h-4 animate-spin text-lime" aria-hidden />
+          <span className="font-mono uppercase tracking-[0.18em] text-[11px]">Loading session…</span>
         </div>
       </div>
     );
