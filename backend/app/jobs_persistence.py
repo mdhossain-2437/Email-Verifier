@@ -80,6 +80,37 @@ def maybe_save_progress(job: Any, *, uid: Optional[str] = None) -> bool:
     return False
 
 
+def get_job(job_id: str) -> Optional[dict]:
+    """Look up a single job by id in Firestore. Returns the doc dict
+    (including the ``uid`` field for ownership checks) or ``None`` if
+    the doc doesn't exist or Firestore is unavailable.
+
+    Used by ``_require_owned_job`` in ``main.py`` as the multi-machine
+    fallback path: when a status poll lands on a machine whose in-memory
+    ``_JOBS`` doesn't have the job (because the original POST landed on
+    a different Fly machine / restarted process), we recover the job
+    record from Firestore before deciding 404 vs 200.
+
+    NOTE: the doc does NOT include the per-row ``results`` array — those
+    are too large for Firestore's 1 MB doc limit (see ``_job_to_doc``).
+    Result-download endpoints will still 404 from a different machine
+    until we ship a separate results-storage layer (Firebase Storage
+    blobs are the planned target). Status polling, however, is fully
+    multi-machine-safe with this fallback.
+    """
+    doc = _firestore_doc(job_id)
+    if doc is None:
+        return None
+    try:
+        snap = doc.get()
+        if not snap.exists:
+            return None
+        return snap.to_dict()
+    except Exception:  # noqa: BLE001
+        logger.exception("Firestore get_job failed for job_id=%s", job_id)
+        return None
+
+
 def list_jobs(uid: Optional[str] = None, *, limit: int = 50) -> list[dict]:
     """Return up to ``limit`` recent jobs from Firestore, ordered by
     ``updated_at`` descending. If ``uid`` is provided, scopes to that
