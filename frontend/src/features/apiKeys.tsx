@@ -91,8 +91,8 @@ export function ApiKeysView() {
   return (
     <div className="space-y-6">
       {freshKey && (
-        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5 space-y-3">
-          <div className="flex items-center gap-2 text-emerald-200 font-medium">
+        <div className="rounded-2xl border border-lime/30 bg-lime/[0.06] p-5 space-y-3">
+          <div className="flex items-center gap-2 text-lime-200 font-medium">
             <ShieldCheck className="w-4 h-4" /> New key generated
           </div>
           <p className="text-xs text-zinc-300">
@@ -101,7 +101,7 @@ export function ApiKeysView() {
             revoke and create a new one.
           </p>
           <div className="flex items-stretch gap-2">
-            <code className="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-emerald-200 font-mono break-all select-all">
+            <code className="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-lime-200 font-mono break-all select-all">
               {showFresh ? freshKey : freshKey.slice(0, 8) + "•".repeat(Math.max(8, freshKey.length - 8))}
             </code>
             <button
@@ -115,7 +115,7 @@ export function ApiKeysView() {
             <button
               type="button"
               onClick={copyFresh}
-              className="px-3 rounded-lg border border-emerald-400/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-200 text-xs font-medium"
+              className="px-3 rounded-lg border border-lime/30 bg-lime/[0.08] hover:bg-lime/[0.16] text-lime-200 text-xs font-medium"
             >
               {copied ? "Copied!" : (
                 <span className="inline-flex items-center gap-1.5">
@@ -137,7 +137,7 @@ export function ApiKeysView() {
 
       <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-4">
         <div className="flex items-center gap-2 text-zinc-100 font-medium">
-          <KeyRound className="w-4 h-4 text-indigo-300" /> Generate a new key
+          <KeyRound className="w-4 h-4 text-lime" /> Generate a new key
         </div>
         <form onSubmit={onCreate} className="flex flex-col sm:flex-row gap-2">
           <input
@@ -146,12 +146,12 @@ export function ApiKeysView() {
             onChange={(e) => setName(e.target.value)}
             placeholder="Label (e.g. CI runner, local dev, marketing-agent)"
             maxLength={80}
-            className="flex-1 rounded-lg border border-white/10 bg-white/5 focus:bg-white/10 focus:border-indigo-400/40 outline-none text-sm px-3 py-2"
+            className="flex-1 rounded-lg border border-white/10 bg-white/5 focus:bg-white/10 focus:border-lime/40 outline-none text-sm px-3 py-2"
           />
           <button
             type="submit"
             disabled={creating}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 transition"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-lime hover:bg-lime-300 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 transition"
           >
             {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             Create key
@@ -216,7 +216,7 @@ export function ApiKeysView() {
                         <ShieldAlert className="w-3 h-3" /> revoked
                       </span>
                     ) : (
-                      <span className="text-[11px] inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-200 px-2 py-0.5">
+                      <span className="text-[11px] inline-flex items-center gap-1 rounded-full border border-lime/30 bg-lime/[0.08] text-lime-200 px-2 py-0.5">
                         <ShieldCheck className="w-3 h-3" /> active
                       </span>
                     )}

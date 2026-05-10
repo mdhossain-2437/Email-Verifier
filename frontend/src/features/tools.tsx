@@ -87,18 +87,18 @@ export function ToolsMarketplaceView({ onGo }: { onGo: (t: Tab) => void }) {
               className="group text-left rounded-2xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] backdrop-blur p-5 transition-colors"
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 ring-1 ring-indigo-500/30 grid place-items-center">
-                  <Icon className="w-4 h-4 text-indigo-300" />
+                <div className="w-10 h-10 rounded-xl bg-lime/[0.08] ring-1 ring-lime/30 grid place-items-center">
+                  <Icon className="w-4 h-4 text-lime" />
                 </div>
                 {c.badge && (
-                  <span className="text-[10px] rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 uppercase tracking-wider font-medium">
+                  <span className="text-[10px] rounded-full bg-lime/[0.12] text-lime border border-lime/30 px-2 py-0.5 uppercase tracking-wider font-medium">
                     {c.badge}
                   </span>
                 )}
               </div>
               <div className="mt-3 text-base font-semibold text-white">{c.title}</div>
               <div className="mt-1.5 text-sm text-zinc-400 leading-relaxed">{c.body}</div>
-              <div className="mt-4 inline-flex items-center gap-1 text-xs text-indigo-300 group-hover:text-indigo-200">
+              <div className="mt-4 inline-flex items-center gap-1 text-xs text-lime group-hover:text-lime-200">
                 Open <ArrowUpRight className="w-3 h-3" />
               </div>
             </button>

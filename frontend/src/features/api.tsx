@@ -62,7 +62,7 @@ curl -OJ "${baseUrl}/api/jobs/<job_id>/results.json?status=valid"`,
   ];
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-2">
+      <div className="rounded-xl border border-white/[0.06] bg-ink-100/60 p-4 space-y-2">
         <div className="flex items-center gap-2 text-zinc-200">
           <ServerCog className="w-4 h-4" />
           <span className="font-medium">REST API</span>
@@ -70,7 +70,7 @@ curl -OJ "${baseUrl}/api/jobs/<job_id>/results.json?status=valid"`,
         <p className="text-sm text-zinc-400">
           Every UI feature is also exposed as a JSON API. Interactive Swagger UI lives at{" "}
           <a
-            className="text-indigo-300 hover:underline"
+            className="text-lime hover:underline"
             href={`${baseUrl}/docs`}
             target="_blank"
             rel="noreferrer"
@@ -83,9 +83,9 @@ curl -OJ "${baseUrl}/api/jobs/<job_id>/results.json?status=valid"`,
       {examples.map((e) => (
         <div
           key={e.title}
-          className="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden"
+          className="rounded-xl border border-white/[0.06] bg-ink-100/60 overflow-hidden"
         >
-          <div className="px-4 py-2 border-b border-zinc-800 text-sm text-zinc-300">{e.title}</div>
+          <div className="px-4 py-2 border-b border-white/[0.06] text-sm text-zinc-300">{e.title}</div>
           <pre className="px-4 py-3 text-xs font-mono text-zinc-200 overflow-x-auto whitespace-pre">
             {e.body}
           </pre>

@@ -1,9 +1,85 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 @layer base {
   :root {
-    --radius: 0.5rem
+    --radius: 14px;
+    --color-ink-base: 14, 14, 14;
+    --color-ink-100: 19, 19, 19;
+    --color-ink-50: 28, 27, 27;
+    --color-lime: 195, 244, 0;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background: rgba(195, 244, 0, 0.85);
+    color: #0e0e0e;
   }
 }
 
+@layer components {
+  /* Editorial section caption: monospace, uppercase, lime accent dot. */
+  .eyebrow {
+    @apply inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-zinc-400;
+  }
+  .eyebrow::before {
+    content: "";
+    @apply inline-block h-1.5 w-1.5 rounded-full bg-lime;
+  }
+
+  /* Hairline card surface. Use on raised content sections. */
+  .surface-card {
+    @apply rounded-2xl border border-white/[0.06] bg-ink-100/80 backdrop-blur-sm shadow-card;
+  }
+  .surface-card-soft {
+    @apply rounded-2xl border border-white/[0.05] bg-ink-100/50;
+  }
+  /* Inner panel inside a card. */
+  .surface-inset {
+    @apply rounded-xl border border-white/[0.04] bg-ink/60;
+  }
+
+  /* Primary lime CTA. Min height 44 to clear WCAG 2.5.5 touch targets. */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 min-h-[44px] rounded-full bg-lime px-5 py-2.5 font-semibold text-ink shadow-glow transition-all duration-200 ease-hover hover:-translate-y-0.5 hover:bg-lime-300 focus-visible:outline-2 focus-visible:outline-lime active:translate-y-0 disabled:opacity-60 disabled:pointer-events-none;
+  }
+  /* Ghost outline CTA. */
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 min-h-[44px] rounded-full border border-white/15 bg-white/[0.03] px-5 py-2.5 font-medium text-zinc-100 transition-colors duration-200 ease-hover hover:bg-white/[0.07] hover:border-white/25 disabled:opacity-60 disabled:pointer-events-none;
+  }
+  /* Compact ghost button (44px tall, smaller padding for in-toolbar use). */
+  .btn-ghost-sm {
+    @apply inline-flex items-center justify-center gap-1.5 min-h-[40px] rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-medium text-zinc-200 transition-colors duration-150 ease-hover hover:bg-white/[0.07] hover:border-white/20 disabled:opacity-60 disabled:pointer-events-none;
+  }
+  /* Tertiary ink-coloured pill (used for secondary in dark callouts). */
+  .btn-ink {
+    @apply inline-flex items-center justify-center gap-2 min-h-[44px] rounded-full bg-ink-50/80 px-5 py-2.5 font-medium text-zinc-100 border border-white/5 transition-colors hover:bg-ink-50;
+  }
+
+  /* Input baseline. Min-height clears WCAG 2.5.5 touch target. */
+  .input {
+    @apply w-full min-h-[44px] rounded-xl border border-white/[0.08] bg-ink/60 px-3.5 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 transition-colors duration-150 focus:border-lime/40 focus:bg-white/[0.04] focus:outline-none;
+  }
+  /* Textarea: same as .input but allow taller default + resize. */
+  .input-textarea {
+    @apply w-full rounded-xl border border-white/[0.08] bg-ink/60 px-3.5 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 transition-colors duration-150 focus:border-lime/40 focus:bg-white/[0.04] focus:outline-none resize-y;
+  }
+  /* Mono caption used as a key/value caption inside cards. */
+  .caption {
+    @apply font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-400;
+  }
+
+  /* Hairline divider. */
+  .hairline {
+    @apply border-white/[0.06];
+  }
+}

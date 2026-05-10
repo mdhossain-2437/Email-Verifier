@@ -201,7 +201,7 @@ export function LeadFinderView() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Jane Doe, ACME Inc, acme.com"
-            className="w-full h-44 rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-500 font-mono resize-none focus:border-indigo-400/40"
+            className="w-full h-44 rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-500 font-mono resize-none focus:border-lime/40"
           />
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <PrimaryButton onClick={run} disabled={loading} icon={Users}>
@@ -223,7 +223,7 @@ export function LeadFinderView() {
 
         <div className="rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur p-5">
           <div className="flex items-center gap-2 mb-3">
-            <Settings2 className="w-4 h-4 text-indigo-300" />
+            <Settings2 className="w-4 h-4 text-lime" />
             <div className="text-sm font-medium text-white">Pipeline</div>
           </div>
           <div className="space-y-3">
@@ -260,7 +260,7 @@ export function LeadFinderView() {
             <div>
               <div className="text-base font-semibold text-white">Extracted Leads</div>
               <div className="text-xs text-zinc-500">
-                Found <span className="text-emerald-300">{results.filter((r) => r.best_email).length}</span>{" "}
+                Found <span className="text-lime">{results.filter((r) => r.best_email).length}</span>{" "}
                 of {results.length} matching profiles
                 {elapsed !== null && ` · ${(elapsed / 1000).toFixed(2)}s`}
               </div>
@@ -305,7 +305,7 @@ function LeadCard({
     .map((s) => s[0]?.toUpperCase() ?? "")
     .join("");
   const statusColor: Record<string, string> = {
-    valid: "text-emerald-300",
+    valid: "text-lime",
     risky: "text-amber-300",
     invalid: "text-rose-300",
     unknown: "text-zinc-400",
@@ -313,7 +313,7 @@ function LeadCard({
   return (
     <div className="rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] p-4 transition-colors">
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400/40 to-sky-400/40 grid place-items-center text-sm font-semibold text-white shrink-0">
+        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-lime/40 to-sky-400/40 grid place-items-center text-sm font-semibold text-white shrink-0">
           {initials || "?"}
         </div>
         <div className="flex-1 min-w-0">
@@ -330,7 +330,7 @@ function LeadCard({
           <div className="text-xs text-zinc-400 mt-0.5">
             {row.company ? (
               <>
-                at <span className="text-emerald-300">{row.company}</span>
+                at <span className="text-lime">{row.company}</span>
               </>
             ) : (
               <span className="text-zinc-500">domain {row.domain}</span>
@@ -385,7 +385,7 @@ function LeadDetailModal({
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
   const statusColor: Record<string, string> = {
-    valid: "text-emerald-300",
+    valid: "text-lime",
     risky: "text-amber-300",
     invalid: "text-rose-300",
     unknown: "text-zinc-400",
@@ -463,7 +463,7 @@ function LeadDetailModal({
 
 function LeadCandidateRow({ c }: { c: LeadFinderCandidate }) {
   const statusCls: Record<Status, string> = {
-    valid: "text-emerald-300",
+    valid: "text-lime",
     risky: "text-amber-300",
     invalid: "text-rose-300",
     unknown: "text-zinc-400",

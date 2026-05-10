@@ -16,9 +16,9 @@ import {
 export function AboutTab({ meta }: { meta: ServerMeta | null }) {
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-zinc-800 bg-gradient-to-br from-indigo-500/10 via-zinc-900/40 to-violet-500/10 p-6">
+      <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-br from-lime/[0.08] via-zinc-900/40 to-lime/[0.08] p-6">
         <div className="flex items-start gap-4 flex-wrap">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 grid place-items-center text-white text-xl font-semibold shadow-lg shadow-indigo-500/30">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-lime to-lime-300 grid place-items-center text-white text-xl font-semibold shadow-lg shadow-lime/30">
             DH
           </div>
           <div className="flex-1 min-w-[240px]">
@@ -32,7 +32,7 @@ export function AboutTab({ meta }: { meta: ServerMeta | null }) {
                 href={PORTFOLIO_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-lg border border-indigo-500/40 bg-indigo-500/15 px-3 py-2 text-sm text-indigo-200 hover:bg-indigo-500/25"
+                className="inline-flex items-center gap-2 rounded-lg border border-lime/40 bg-lime/15 px-3 py-2 text-sm text-lime-200 hover:bg-lime/25"
               >
                 <Globe className="w-4 h-4" />
                 delowarhossain.dev
@@ -42,7 +42,7 @@ export function AboutTab({ meta }: { meta: ServerMeta | null }) {
                 href={GITHUB_PROFILE}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900/50 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
+                className="inline-flex items-center gap-2 rounded-lg border border-white/[0.08] bg-ink/50 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
               >
                 <Github className="w-4 h-4" />
                 github.com/mdhossain-2437
@@ -52,7 +52,7 @@ export function AboutTab({ meta }: { meta: ServerMeta | null }) {
                 href={GITHUB_REPO}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900/50 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
+                className="inline-flex items-center gap-2 rounded-lg border border-white/[0.08] bg-ink/50 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
               >
                 <Github className="w-4 h-4" />
                 Source on GitHub
@@ -64,7 +64,7 @@ export function AboutTab({ meta }: { meta: ServerMeta | null }) {
       </div>
 
       <div className="grid sm:grid-cols-2 gap-4">
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+        <div className="rounded-xl border border-white/[0.06] bg-ink-100/60 p-5">
           <div className="text-zinc-100 font-medium mb-1">Built with care</div>
           <p className="text-sm text-zinc-400">
             This tool exists to help you keep your lists clean and your sender reputation healthy.
@@ -73,7 +73,7 @@ export function AboutTab({ meta }: { meta: ServerMeta | null }) {
             Bring your own opt-in lists and the verifier will do the rest.
           </p>
         </div>
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+        <div className="rounded-xl border border-white/[0.06] bg-ink-100/60 p-5">
           <div className="text-zinc-100 font-medium mb-1">Used responsibly</div>
           <p className="text-sm text-zinc-400">
             Live SMTP probes can affect your sending IP&apos;s reputation if abused. Keep
@@ -84,7 +84,7 @@ export function AboutTab({ meta }: { meta: ServerMeta | null }) {
         </div>
       </div>
 
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+      <div className="rounded-xl border border-white/[0.06] bg-ink-100/60 p-5">
         <div className="text-zinc-100 font-medium mb-3">Server capabilities</div>
         {meta ? (
           <div className="grid sm:grid-cols-2 gap-3 text-sm">

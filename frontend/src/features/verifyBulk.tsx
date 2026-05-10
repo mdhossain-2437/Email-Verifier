@@ -87,7 +87,7 @@ function ResultsTable({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-10 text-center text-zinc-500">
+      <div className="rounded-xl border border-white/[0.06] bg-ink-100/40 p-10 text-center text-zinc-500">
         <Mail className="w-10 h-10 mx-auto mb-3 opacity-50" />
         Nothing matches the current filter. Try widening the chips, clearing the search, or
         pressing <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">/</kbd> to focus
@@ -97,7 +97,7 @@ function ResultsTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/40 backdrop-blur">
+    <div className="overflow-hidden surface-card">
       <div className="max-h-[520px] overflow-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-zinc-950/95 backdrop-blur">
@@ -144,7 +144,7 @@ function ResultsTable({
                       title="Copy email"
                     >
                       {copied === r.email ? (
-                        <span className="text-emerald-400">copied</span>
+                        <span className="text-lime">copied</span>
                       ) : (
                         <Copy className="w-3.5 h-3.5" />
                       )}
@@ -156,7 +156,7 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
-      <div className="border-t border-zinc-800 px-4 py-2 text-xs text-zinc-500 flex justify-between flex-wrap gap-2">
+      <div className="border-t border-white/[0.06] px-4 py-2 text-xs text-zinc-500 flex justify-between flex-wrap gap-2">
         <span>{rows.length} row{rows.length === 1 ? "" : "s"} match the filter</span>
         <span>
           Click any row for full details &middot; press{" "}
@@ -222,7 +222,7 @@ function AdvancedFilters({
   ];
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
+    <div className="rounded-xl border border-white/[0.06] bg-ink-100/60 p-4 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[220px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
@@ -231,7 +231,7 @@ function AdvancedFilters({
             value={filters.query}
             onChange={(e) => setFilters({ ...filters, query: e.target.value })}
             placeholder="Search email, domain, provider, country, reason..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-zinc-900/60 border border-zinc-700 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500"
+            className="w-full pl-9 pr-3 py-2 rounded-xl bg-ink/60 border border-white/[0.08] text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-lime/40 focus:outline-none min-h-[40px]"
           />
         </div>
         <GhostButton onClick={onPreset} icon={Sparkles} title="Valid + has-MX + non-role + non-disposable">
@@ -278,7 +278,7 @@ function AdvancedFilters({
           <select
             value={filters.country}
             onChange={(e) => setFilters({ ...filters, country: e.target.value })}
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900/60 px-2 py-2 text-sm text-zinc-200 focus:border-indigo-500"
+            className="w-full rounded-xl border border-white/[0.08] bg-ink/60 px-3 py-2.5 text-sm text-zinc-200 focus:border-lime/40 focus:outline-none min-h-[40px]"
           >
             <option value="all">All countries</option>
             {countries.map((c) => (
@@ -307,14 +307,14 @@ function FilterPicker<T extends string>({
   return (
     <div>
       <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">{label}</div>
-      <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-700 bg-zinc-900/40 p-1">
+      <div className="flex flex-wrap gap-1 rounded-lg border border-white/[0.08] bg-ink/40 p-1">
         {options.map((o) => (
           <button
             key={o.key}
             onClick={() => onChange(o.key)}
             className={`px-3 py-1.5 rounded-md text-xs font-medium ${
               value === o.key
-                ? "bg-indigo-500/20 text-indigo-200"
+                ? "bg-lime/[0.12] text-lime-200"
                 : "text-zinc-400 hover:text-white"
             }`}
           >
@@ -342,7 +342,7 @@ function VerifyOptionsCard({
   setConcurrency: (v: number) => void;
 }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+    <div className="rounded-xl border border-white/[0.06] bg-ink-100/60 p-4">
       <div className="flex items-center gap-2 mb-3 text-zinc-300">
         <Settings2 className="w-4 h-4" />
         <span className="text-sm font-medium">Verification settings</span>
@@ -362,7 +362,7 @@ function VerifyOptionsCard({
         />
         <div>
           <div className="text-sm text-zinc-200 mb-1">
-            Concurrency: <span className="text-indigo-300 font-mono">{concurrency}</span>
+            Concurrency: <span className="text-lime font-mono">{concurrency}</span>
           </div>
           <input
             type="range"
@@ -370,7 +370,7 @@ function VerifyOptionsCard({
             max={48}
             value={concurrency}
             onChange={(e) => setConcurrency(parseInt(e.target.value, 10))}
-            className="w-full accent-indigo-500"
+            className="w-full accent-lime"
           />
           <div className="text-xs text-zinc-500">Higher = faster but more DNS pressure.</div>
         </div>
@@ -399,7 +399,7 @@ function PreCleanPanel({
   setDropRole: (v: boolean) => void;
 }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+    <div className="rounded-xl border border-white/[0.06] bg-ink-100/60 p-4">
       <div className="flex items-center gap-2 mb-3 text-zinc-300">
         <Filter className="w-4 h-4" />
         <span className="text-sm font-medium">Pre-clean before verifying</span>
@@ -459,10 +459,10 @@ function DetailModal({
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-2xl max-h-[90vh] overflow-auto rounded-2xl border border-zinc-800 bg-zinc-950"
+        className="relative w-full max-w-2xl max-h-[90vh] overflow-auto rounded-2xl border border-white/[0.06] bg-zinc-950"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 p-4 border-b border-zinc-800 bg-zinc-950">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 p-4 border-b border-white/[0.06] bg-zinc-950">
           <div className="flex items-center gap-3 min-w-0">
             {r.gravatar_url && (
               <img
@@ -471,7 +471,7 @@ function DetailModal({
                   (e.target as HTMLImageElement).style.display = "none";
                 }}
                 alt=""
-                className="w-10 h-10 rounded-full border border-zinc-700 flex-shrink-0"
+                className="w-10 h-10 rounded-full border border-white/[0.08] flex-shrink-0"
               />
             )}
             <div className="min-w-0">
@@ -549,7 +549,7 @@ function DetailModal({
                     href={r.gravatar_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-indigo-300 hover:underline break-all"
+                    className="text-lime hover:underline break-all"
                   >
                     {r.gravatar_url}
                   </a>
@@ -559,7 +559,7 @@ function DetailModal({
             )}
           </div>
 
-          <div className="rounded-xl border border-zinc-800 bg-black/40 p-3">
+          <div className="rounded-xl border border-white/[0.06] bg-black/40 p-3">
             <div className="text-xs uppercase tracking-wider text-zinc-500 mb-2">Raw payload</div>
             <pre className="text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">
               {JSON.stringify(r, null, 2)}
@@ -625,7 +625,7 @@ function ExportMenu({
   };
   const formats: ExportFormat[] = ["csv", "xlsx", "txt", "json"];
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
+    <div className="rounded-xl border border-white/[0.06] bg-ink-100/60 p-4 space-y-3">
       <div className="flex items-center gap-2 text-zinc-300">
         <Download className="w-4 h-4" />
         <span className="text-sm font-medium">Download</span>
@@ -720,7 +720,7 @@ function ExportRow({
               type="button"
               onClick={() => void handler()}
               disabled={isDisabled}
-              className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900/40 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800/60 hover:text-white disabled:opacity-40"
+              className="inline-flex items-center gap-2 rounded-lg border border-white/[0.08] bg-ink/40 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800/60 hover:text-white disabled:opacity-40"
             >
               {busyFmt === fmt ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -747,9 +747,9 @@ function CleanPreview({ result, onUse }: { result: CleanResponse; onUse: (rows: 
     { label: "Role accounts", value: result.role_removed },
   ];
   return (
-    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3">
+    <div className="rounded-xl border border-lime/30 bg-lime/[0.06] p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm text-emerald-200">
+        <div className="text-sm text-lime-200">
           Cleaned <span className="font-semibold text-white">{result.input_count}</span> inputs to{" "}
           <span className="font-semibold text-white">{result.output_count}</span> deliverable
           candidates &middot; {result.elapsed_ms.toFixed(0)} ms
@@ -762,7 +762,7 @@ function CleanPreview({ result, onUse }: { result: CleanResponse; onUse: (rows: 
         {drops.map((d) => (
           <span
             key={d.label}
-            className="px-2.5 py-1 rounded-lg border border-zinc-700 bg-zinc-900/40 text-zinc-300"
+            className="px-2.5 py-1 rounded-lg border border-white/[0.08] bg-ink/40 text-zinc-300"
           >
             {d.label}: <span className="font-mono text-zinc-100">{d.value}</span>
           </span>
@@ -1016,7 +1016,7 @@ export function VerifyBulkTab({
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Paste emails - one per line, or comma/space separated. Up to 100,000 per job."
-            className="w-full h-44 rounded-xl border border-zinc-700 bg-zinc-900/40 px-4 py-3 text-sm font-mono text-zinc-100 placeholder:text-zinc-500 resize-none focus:border-indigo-500"
+            className="w-full h-44 rounded-xl border border-white/[0.08] bg-ink/40 px-4 py-3 text-sm font-mono text-zinc-100 placeholder:text-zinc-500 resize-none focus:border-lime/40"
           />
           <div className="text-xs text-zinc-500">
             Tip: drop a CSV/XLSX/TXT file on the right and we&apos;ll extract addresses, pre-clean
@@ -1097,13 +1097,13 @@ export function VerifyBulkTab({
 
       {(running || results.length > 0) && (
         <>
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+          <div className="rounded-xl border border-white/[0.06] bg-ink-100/60 p-4">
             <div className="flex items-center justify-between text-sm mb-2 flex-wrap gap-2">
               <span className="text-zinc-300 inline-flex items-center gap-2">
                 {running ? (
                   <Spinner />
                 ) : (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <CheckCircle2 className="w-4 h-4 text-lime" />
                 )}
                 {running ? `Processing ${progress.processed}/${progress.total}` : "Done"}
               </span>
@@ -1114,7 +1114,7 @@ export function VerifyBulkTab({
             </div>
             <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
               <div
-                className={`h-full bg-gradient-to-r from-indigo-500 to-violet-500 ${
+                className={`h-full bg-gradient-to-r from-lime to-lime-300 ${
                   running ? "pulse-soft" : ""
                 }`}
                 style={{ width: `${pct}%` }}

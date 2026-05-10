@@ -46,35 +46,37 @@ function DashboardTile({
   tone: "indigo" | "emerald" | "amber" | "sky";
 }) {
   const toneText: Record<typeof tone, string> = {
-    indigo: "text-indigo-300",
-    emerald: "text-emerald-300",
+    indigo: "text-lime",
+    emerald: "text-lime",
     amber: "text-amber-300",
-    sky: "text-sky-300",
+    sky: "text-lime",
   };
   const toneBg: Record<typeof tone, string> = {
-    indigo: "bg-indigo-500/10 ring-indigo-500/30",
-    emerald: "bg-emerald-500/10 ring-emerald-500/30",
+    indigo: "bg-lime/[0.08] ring-lime/30",
+    emerald: "bg-lime/[0.08] ring-lime/30",
     amber: "bg-amber-500/10 ring-amber-500/30",
-    sky: "bg-sky-500/10 ring-sky-500/30",
+    sky: "bg-lime/[0.08] ring-lime/30",
   };
   return (
-    <div className="rounded-2xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.035] backdrop-blur p-5 transition-colors">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 font-medium">
+    <div className="surface-card-soft hover:bg-ink-100/60 hover:border-white/[0.10] p-5 transition-colors group">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-medium">
             {label}
           </div>
-          <div className="mt-2 text-3xl sm:text-4xl font-semibold text-white tabular-nums tracking-tight">
+          <div className="mt-3 font-display text-3xl sm:text-4xl font-bold text-white tabular-nums tracking-tightest">
             {value}
           </div>
         </div>
-        <div className={`w-9 h-9 rounded-full ring-1 grid place-items-center ${toneBg[tone]}`}>
-          <Icon className={`w-4 h-4 ${toneText[tone]}`} />
+        <div className={`w-10 h-10 rounded-full ring-1 grid place-items-center shrink-0 ${toneBg[tone]} transition-transform group-hover:scale-110`}>
+          <Icon className={`w-4 h-4 ${toneText[tone]}`} aria-hidden />
         </div>
       </div>
-      <div className={`mt-3 text-xs ${toneText[tone]} flex items-center gap-1`}>
-        <ArrowUpRight className="w-3 h-3" />
-        {detail}
+      <div className={`mt-4 text-xs ${toneText[tone]} flex items-center gap-1.5`}>
+        <ArrowUpRight className="w-3 h-3" aria-hidden />
+        <span className="font-mono uppercase tracking-[0.14em] text-[10px] opacity-90">
+          {detail}
+        </span>
       </div>
     </div>
   );
@@ -134,6 +136,7 @@ export function CommandCenterView({
     return (
       <div className="space-y-6">
         <PageHeader
+          eyebrow="/ 01 — Command center"
           title="Command Center"
           subtitle="Real-time overview of your verification ecosystem."
         />
@@ -168,6 +171,7 @@ export function CommandCenterView({
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="/ 01 — Command center"
         title="Command Center"
         subtitle="Real-time overview of your verification ecosystem. Numbers below come from /api/dashboard — they reflect actual jobs run on this server, not demo data."
         cta={
@@ -175,10 +179,10 @@ export function CommandCenterView({
             {lastUpdated && (
               <button
                 onClick={() => setRefreshTick((n) => n + 1)}
-                className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-white/5 bg-white/[0.03] hover:bg-white/[0.06] text-[11px] text-zinc-400 px-2.5 py-1.5"
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.06] font-mono uppercase tracking-[0.14em] text-[10px] text-zinc-400 min-h-[36px] px-3 py-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-lime focus-visible:outline-offset-2"
                 title="Refresh now"
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-soft" />
+                <span className="w-1.5 h-1.5 rounded-full bg-lime pulse-soft" aria-hidden />
                 Updated {relativeTime(lastUpdated / 1000)}
               </button>
             )}
@@ -190,7 +194,8 @@ export function CommandCenterView({
       />
 
       {error && (
-        <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/[0.08] px-4 py-2.5 text-sm text-rose-200">
+          <span className="font-mono uppercase tracking-[0.16em] text-[10px] text-rose-300/80">Error ·</span>{" "}
           dashboard fetch failed: {error}
         </div>
       )}
@@ -227,11 +232,11 @@ export function CommandCenterView({
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur p-5">
+        <div className="surface-card-soft p-5 sm:p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="text-base font-semibold text-white">Live Feed</div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 text-emerald-300 px-2 py-0.5 text-[11px] font-medium border border-emerald-500/30">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-soft" />
+            <div className="font-display text-base font-semibold text-white tracking-tight">Live Feed</div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-lime/[0.08] text-lime px-2.5 py-0.5 font-mono uppercase tracking-[0.16em] text-[10px] border border-lime/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-lime pulse-soft" aria-hidden />
               Real-time
             </span>
           </div>
@@ -260,15 +265,15 @@ export function CommandCenterView({
           )}
         </div>
 
-        <div className="lg:col-span-2 rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur p-5">
-          <div className="flex items-center justify-between mb-4">
+        <div className="lg:col-span-2 surface-card-soft p-5 sm:p-6">
+          <div className="flex items-center justify-between mb-5">
             <div>
-              <div className="text-base font-semibold text-white">Verification Volume (7 Days)</div>
-              <div className="text-xs text-zinc-500 mt-0.5">
+              <div className="font-display text-base font-semibold text-white tracking-tight">Verification Volume (7 Days)</div>
+              <div className="text-xs text-zinc-500 mt-1">
                 Per-day processed counts derived from job timestamps. Peak today: {peakLabel}.
               </div>
             </div>
-            <BarChart3 className="w-4 h-4 text-zinc-500" />
+            <BarChart3 className="w-4 h-4 text-zinc-500" aria-hidden />
           </div>
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
@@ -280,13 +285,14 @@ export function CommandCenterView({
                   tickLine={false}
                 />
                 <Tooltip
-                  cursor={{ fill: "rgba(99,102,241,0.08)" }}
+                  cursor={{ fill: "rgba(195, 244, 0, 0.08)" }}
                   contentStyle={{
-                    background: "#0b0d18",
+                    background: "#131313",
                     border: "1px solid rgba(255,255,255,0.08)",
-                    borderRadius: 8,
+                    borderRadius: 10,
                     color: "#e6e7eb",
                     fontSize: 12,
+                    fontFamily: '"JetBrains Mono", monospace',
                   }}
                   labelStyle={{ color: "#a1a1aa" }}
                   formatter={(v: number) => [v.toLocaleString(), "verified"]}
@@ -294,8 +300,8 @@ export function CommandCenterView({
                 <Bar dataKey="count" fill="url(#volGradient)" radius={[6, 6, 0, 0]} />
                 <defs>
                   <linearGradient id="volGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#a5b4fc" stopOpacity={1} />
-                    <stop offset="100%" stopColor="#6366f1" stopOpacity={0.4} />
+                    <stop offset="0%" stopColor="#c3f400" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#5f7600" stopOpacity={0.4} />
                   </linearGradient>
                 </defs>
               </BarChart>
@@ -304,19 +310,19 @@ export function CommandCenterView({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-base font-semibold text-white">Recent Jobs</div>
+      <div className="surface-card-soft p-5 sm:p-6">
+        <div className="flex items-center justify-between mb-5">
+          <div className="font-display text-base font-semibold text-white tracking-tight">Recent Jobs</div>
           <button
             onClick={onNewJob}
-            className="text-xs text-indigo-300 hover:text-indigo-200 inline-flex items-center gap-1"
+            className="text-xs text-lime hover:text-lime-200 inline-flex items-center gap-1"
           >
             View All <ArrowUpRight className="w-3 h-3" />
           </button>
         </div>
         {!snap || snap.recent_jobs.length === 0 ? (
           <div className="text-sm text-zinc-500 py-6 text-center">
-            No jobs yet. Click <span className="text-indigo-300">New Job</span> to start the
+            No jobs yet. Click <span className="text-lime">New Job</span> to start the
             first one.
           </div>
         ) : (
@@ -364,7 +370,7 @@ export function CommandCenterView({
                                 .downloadJobResults(j.job_id, "csv")
                                 .catch(() => undefined);
                             }}
-                            className="text-xs text-indigo-300 hover:text-indigo-200"
+                            className="text-xs text-lime hover:text-lime-200"
                           >
                             Export CSV
                           </button>
@@ -386,7 +392,7 @@ export function CommandCenterView({
 
 function StatusDot({ status }: { status: Status }) {
   const cls: Record<Status, string> = {
-    valid: "bg-emerald-400",
+    valid: "bg-lime",
     invalid: "bg-rose-400",
     risky: "bg-amber-400",
     unknown: "bg-zinc-400",
@@ -396,8 +402,8 @@ function StatusDot({ status }: { status: Status }) {
 
 function JobStatusPill({ status }: { status: string }) {
   const map: Record<string, string> = {
-    done: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-    running: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30",
+    done: "bg-lime/[0.12] text-lime border-lime/30",
+    running: "bg-lime/15 text-lime border-lime/30",
     queued: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
     error: "bg-rose-500/15 text-rose-300 border-rose-500/30",
   };
@@ -419,7 +425,7 @@ function JobStatusPill({ status }: { status: string }) {
     >
       <span
         className={`w-1.5 h-1.5 rounded-full ${
-          status === "running" ? "bg-indigo-400 pulse-soft" : "bg-current"
+          status === "running" ? "bg-lime-300 pulse-soft" : "bg-current"
         }`}
       />
       {label}

@@ -34,11 +34,23 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const AUDIT_MODE = import.meta.env.VITE_AUDIT_MODE === "true";
+const AUDIT_USER = AUDIT_MODE
+  ? ({
+      uid: "audit-fake-uid",
+      email: "audit@delowarhossain.dev",
+      displayName: "Audit Reviewer",
+      photoURL: null,
+      getIdToken: async () => "audit-fake-token",
+    } as unknown as User)
+  : null;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [ready, setReady] = useState(false);
+  const [user, setUser] = useState<User | null>(AUDIT_USER);
+  const [ready, setReady] = useState(AUDIT_MODE);
 
   useEffect(() => {
+    if (AUDIT_MODE) return;
     if (!isFirebaseConfigured) {
       setReady(true);
       return;
@@ -54,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       ready,
-      configured: isFirebaseConfigured,
+      configured: AUDIT_MODE || isFirebaseConfigured,
       getIdToken: async () => {
         if (!isFirebaseConfigured) return null;
         const u = firebaseAuth().currentUser;
