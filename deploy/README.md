@@ -69,5 +69,6 @@ defaults; the deploy-recipe README lists which ones are *required* per host.
 | `EMAIL_VERIFIER_ALLOWED_ORIGINS`     | required | required | required | required | Comma-separated CORS allowlist. |
 | `EMAIL_VERIFIER_AUTH_REQUIRED`       | `true` | `true` | `true` | `true` | Gates `/api/*` behind Firebase ID tokens. |
 | `EMAIL_VERIFIER_ENABLE_SMTP`         | optional | optional | optional | n/a | Tier 4 always disables SMTP. |
-| `WEB_CONCURRENCY`                    | `1`    | `1`    | `1`    | n/a | `_JOBS` registry is in-memory. |
-| `FIREBASE_CREDENTIALS`               | required | required | required | required | Service-account JSON, single-line. |
+| `EMAIL_VERIFIER_JOBS_BACKEND`        | `auto` (or `firestore` for multi-worker) | `auto` | `auto` | n/a | `auto`=Firestore-when-configured, `firestore`=fail-fast if Firebase Admin missing, `memory`=process-local. Tier 4 doesn't run jobs. |
+| `WEB_CONCURRENCY`                    | `1` (or higher with `JOBS_BACKEND=firestore`) | `1` | `1` | n/a | The in-memory job store can't be shared across workers; Firestore-backed jobs make `>1` safe. |
+| `FIREBASE_CREDENTIALS`               | required | required | required | required | Service-account JSON, single-line. Doubles as the Firestore client for jobs persistence. |

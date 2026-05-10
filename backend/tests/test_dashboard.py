@@ -8,7 +8,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main as app_main
-from app.main import Job, _JOBS, app
+from app.job_store import InMemoryJobStore
+from app.main import Job, app
 
 
 @pytest.fixture()
@@ -18,9 +19,13 @@ def client() -> TestClient:
 
 @pytest.fixture(autouse=True)
 def clear_jobs():
-    _JOBS.clear()
+    """Swap in a fresh in-memory store so each test sees an empty
+    registry. Restoring the original at teardown keeps tests isolated
+    even when the global default is later flipped to Firestore."""
+    original = app_main._JOBS
+    app_main._replace_job_store(InMemoryJobStore())
     yield
-    _JOBS.clear()
+    app_main._replace_job_store(original)
 
 
 def test_dashboard_empty_state(client: TestClient):
@@ -66,8 +71,8 @@ def test_dashboard_aggregates_real_job_state(client: TestClient):
         results=[],
         started_at=now,
     )
-    _JOBS[job_done.id] = job_done
-    _JOBS[job_running.id] = job_running
+    app_main._JOBS.put(job_done)
+    app_main._JOBS.put(job_running)
 
     r = client.get("/api/dashboard")
     assert r.status_code == 200
@@ -100,18 +105,20 @@ def test_dashboard_caps_live_feed_and_recent_jobs(client: TestClient):
     the live feed, regardless of how many results each job has."""
     now = time.time()
     for i in range(20):
-        _JOBS[f"job-{i}"] = Job(
-            id=f"job-{i}",
-            status="done",
-            total=10,
-            processed=10,
-            summary={"valid": 10, "invalid": 0, "risky": 0, "unknown": 0},
-            results=[
-                {"email": f"e{j}@d{i}.test", "status": "valid"}
-                for j in range(10)
-            ],
-            started_at=now - i,
-            finished_at=now - i + 1,
+        app_main._JOBS.put(
+            Job(
+                id=f"job-{i}",
+                status="done",
+                total=10,
+                processed=10,
+                summary={"valid": 10, "invalid": 0, "risky": 0, "unknown": 0},
+                results=[
+                    {"email": f"e{j}@d{i}.test", "status": "valid"}
+                    for j in range(10)
+                ],
+                started_at=now - i,
+                finished_at=now - i + 1,
+            )
         )
     body = client.get("/api/dashboard").json()
     assert len(body["recent_jobs"]) == 8

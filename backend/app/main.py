@@ -24,6 +24,7 @@ import asyncio
 import csv
 import io
 import json
+import logging
 import os
 import time
 import uuid
@@ -41,10 +42,13 @@ from .auth import get_current_user, resolve_authorization
 from .disposable import is_disposable, is_role
 from .extractor import extract_emails, extract_unique
 from .files import extract_from_file, supported_extensions
+from .job_store import InMemoryJobStore, JobStore, build_job_store
 from .lead_finder import LeadInput, verify_lead
 from .locale import country_for_domain
 from .providers import provider_for_domain
 from .verifier import VerificationResult, verify_email, verify_many
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Email Verifier API",
@@ -480,15 +484,28 @@ class Job:
     task: Optional[asyncio.Task] = None
 
 
-_JOBS: dict[str, Job] = {}
+# Selected once at process start. Defaults to in-memory when Firebase
+# Admin isn't configured; flips to Firestore as soon as the SDK boots, so
+# multi-worker deploys (and tier 2/3 hosts) see each other's jobs.
+_JOBS: JobStore = build_job_store()
+
+
+def _replace_job_store(store: JobStore) -> None:
+    """Swap the active job store. Test-only — used by ``conftest`` to
+    inject a fresh in-memory store between tests so the registry doesn't
+    leak across cases."""
+    global _JOBS
+    _JOBS = store
 
 
 def _warn_if_multi_worker() -> None:
-    """Emit a loud warning if the deploy is misconfigured to run with more
-    than one uvicorn worker. The in-memory ``_JOBS`` registry is unsafe in
-    that mode (jobs submitted to worker A are invisible to worker B), so the
-    operator needs to know immediately rather than after their first 50%
-    job-status 404 in production.
+    """Emit a loud warning if the deploy is configured to run with more
+    than one uvicorn worker but the job registry is still in-memory.
+
+    With :class:`FirestoreJobStore` active, multi-worker is safe. With
+    the default in-memory store, jobs submitted to worker A are invisible
+    to worker B — so the operator needs to know immediately rather than
+    after their first 50% job-status 404 in production.
     """
     raw = os.environ.get("WEB_CONCURRENCY", "").strip()
     if not raw:
@@ -497,14 +514,15 @@ def _warn_if_multi_worker() -> None:
         workers = int(raw)
     except ValueError:
         return
-    if workers > 1:
+    if workers > 1 and isinstance(_JOBS, InMemoryJobStore):
         import sys
 
         msg = (
-            "WARNING: WEB_CONCURRENCY={n} but the async-job registry is "
-            "process-local. Jobs submitted to one worker will silently 404 "
-            "when polled via another. Pin --workers 1 until job persistence "
-            "is migrated to Firestore."
+            "WARNING: WEB_CONCURRENCY={n} but the job registry is in-memory. "
+            "Jobs submitted to one worker will silently 404 when polled via "
+            "another. Either pin --workers 1 OR set "
+            "EMAIL_VERIFIER_JOBS_BACKEND=firestore (with "
+            "FIREBASE_ADMIN_CREDENTIALS configured)."
         ).format(n=workers)
         print(msg, file=sys.stderr, flush=True)
 
@@ -583,7 +601,7 @@ async def dashboard_endpoint():
     numbers. When no jobs have run yet, totals are 0 and the recent_jobs
     list is empty (the UI handles the empty state)."""
     started = time.perf_counter()
-    jobs = list(_JOBS.values())
+    jobs = _JOBS.all()
 
     total_processed = sum(j.processed for j in jobs)
     total_valid = sum(j.summary.get("valid", 0) for j in jobs)
@@ -886,7 +904,25 @@ async def _run_job(
 ):
     job.status = "running"
     job.started_at = time.time()
+    _JOBS.put(job)
     sem = asyncio.Semaphore(concurrency)
+
+    # Throttle progress flushes: writing the doc on every email finishes
+    # would blow past Firestore's ~1 write/sec/doc soft limit on long
+    # jobs. Flush at most every ~1.5s OR every 25 results, whichever
+    # comes first. The in-memory store is a no-op so the overhead is
+    # purely the timestamp comparison.
+    flush_state: dict[str, float] = {"last": 0.0}
+
+    def _maybe_flush() -> None:
+        now = time.monotonic()
+        if now - flush_state["last"] < 1.5 and job.processed % 25 != 0:
+            return
+        flush_state["last"] = now
+        try:
+            _JOBS.put(job)
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("job_store progress flush failed for %s", job.id)
 
     async def _one(addr: str):
         async with sem:
@@ -894,6 +930,7 @@ async def _run_job(
             job.processed += 1
             job.summary[res.status] = job.summary.get(res.status, 0) + 1
             job.results.append(res.to_dict())
+            _maybe_flush()
 
     try:
         await asyncio.gather(*(_one(a) for a in emails))
@@ -903,6 +940,10 @@ async def _run_job(
         job.error = str(exc)
     finally:
         job.finished_at = time.time()
+        try:
+            _JOBS.put(job)
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("job_store final flush failed for %s", job.id)
 
 
 def _normalise_for_job(req: JobSubmitRequest, raw_emails: list[str]) -> list[str]:
@@ -955,7 +996,7 @@ async def submit_job(req: JobSubmitRequest):
         )
 
     job = Job(id=uuid.uuid4().hex, total=len(emails))
-    _JOBS[job.id] = job
+    _JOBS.put(job)
     job.task = asyncio.create_task(
         _run_job(
             job,
@@ -1253,7 +1294,7 @@ async def lead_finder_endpoint(req: LeadFinderRequest):
 
 @app.delete("/api/jobs/{job_id}")
 async def cancel_job(job_id: str):
-    job = _JOBS.pop(job_id, None)
+    job = _JOBS.delete(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="job not found")
     if job.task and not job.task.done():
