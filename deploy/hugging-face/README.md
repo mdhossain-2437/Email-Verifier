@@ -82,7 +82,7 @@ Go to **Settings ▸ Variables and secrets** on your Space page and add:
 - `FIREBASE_ADMIN_CREDENTIALS` (Secret) — paste the entire service-account
   JSON
 - `EMAIL_VERIFIER_ALLOWED_ORIGINS` (Variable) —
-  e.g. `https://email-verifier-ruby.vercel.app,http://localhost:5173`
+  e.g. `https://saaf-mail.vercel.app,https://email-verifier-ruby.vercel.app,http://localhost:5173`
 - `EMAIL_VERIFIER_AUTH_REQUIRED` (Variable) — `true`
 - `EMAIL_VERIFIER_ENABLE_SMTP` (Variable) — `false`
 
