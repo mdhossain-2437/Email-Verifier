@@ -41,14 +41,16 @@ import {
 import { API_BASE } from "@/lib/api";
 import { GITHUB_REPO } from "@/lib/uiTypes";
 import { ComparisonTable } from "@/components/landing/ComparisonTable";
+import { ContributeStrip } from "@/components/landing/ContributeStrip";
 import { CursorSpotlight } from "@/components/landing/CursorSpotlight";
+import { DynamicStats } from "@/components/landing/DynamicStats";
 import { FAQ } from "@/components/landing/FAQ";
 import { HeroShader } from "@/components/landing/HeroShader";
 import { LetterReveal } from "@/components/landing/LetterReveal";
 import { LiveDemoBar } from "@/components/landing/LiveDemoBar";
 import { MagneticButton } from "@/components/landing/MagneticButton";
 import { MarqueeStrip } from "@/components/landing/MarqueeStrip";
-import { NumberCounter } from "@/components/landing/NumberCounter";
+import { PoweredByStrip } from "@/components/landing/PoweredByStrip";
 import { PricingStrip } from "@/components/landing/PricingStrip";
 import { PublicLayout } from "@/components/landing/PublicLayout";
 import { StickyExplainer } from "@/components/landing/StickyExplainer";
@@ -123,12 +125,8 @@ const HOW_IT_WORKS_STEPS = [
   },
 ];
 
-const STATS = [
-  { label: "Verifications served", value: 12_400_000, suffix: "+" },
-  { label: "File formats accepted", value: 8, suffix: "" },
-  { label: "Median check latency", value: 120, suffix: "ms" },
-  { label: "Concurrent jobs per worker", value: 64, suffix: "" },
-];
+/* Stats are now dynamic — pulled by <DynamicStats> from /api/stats/public
+   and the GitHub API. No more hardcoded numbers here. */
 
 const TRUST_LOGOS = [
   "CSV", "XLSX", "JSON", ".mbox", ".eml", "TXT", "HTML", "LOG",
@@ -367,12 +365,12 @@ export function LandingPage() {
             custom={0}
             className="inline-flex items-center gap-2 rounded-full border border-lime/30 bg-lime/[0.06] backdrop-blur px-3 py-1 font-mono text-[11px] uppercase tracking-[0.2em] text-lime"
           >
-            <Sparkles className="w-3 h-3" aria-hidden /> Open source · MIT · self-host ready
+            <Sparkles className="w-3 h-3" aria-hidden /> Open source · MIT licensed · self-host free
           </motion.div>
           <h1 className="mt-7 font-display font-bold tracking-tightest text-display-xl sm:text-display-2xl leading-[0.94] max-w-5xl">
-            <LetterReveal text="Stop sending email to" />
+            <LetterReveal text="Stop emailing people" />
             <br />
-            <LetterReveal text="dead addresses." className="text-lime" stagger={26} />
+            <LetterReveal text="who don't exist." className="text-lime" stagger={26} />
           </h1>
           <motion.p
             initial="hidden"
@@ -381,10 +379,10 @@ export function LandingPage() {
             custom={3}
             className="mt-7 max-w-2xl text-base sm:text-lg text-zinc-300 leading-relaxed"
           >
-            Clean any email list — paste a few addresses, drop a CSV, or upload
-            an Excel sheet with a million rows. Get back a tidy, verified file
-            with country, role, and deliverability signals on every row. No
-            scraping. Free forever to self-host.
+            Paste a few addresses or upload a spreadsheet with a million rows.
+            We'll tell you which ones are real, which bounce, and which are
+            throwaways — in seconds, not hours. Free to use. Free to
+            self-host. No data leaves unless you say so.
           </motion.p>
           <motion.div
             initial="hidden"
@@ -459,29 +457,8 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* ─── Stats ───────────────────────────────────────────── */}
-      <section className="px-4 sm:px-6 lg:px-10 py-16 sm:py-20 max-w-shell mx-auto">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-          {STATS.map((s, i) => (
-            <motion.div
-              key={s.label}
-              initial="hidden"
-              whileInView="show"
-              viewport={{ once: true, amount: 0.4 }}
-              variants={reveal}
-              custom={i}
-              className="surface-card-soft p-6"
-            >
-              <div className="font-display text-4xl sm:text-5xl font-bold text-lime tabular-nums tracking-tighter">
-                <NumberCounter value={s.value} suffix={s.suffix} />
-              </div>
-              <div className="mt-3 font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-400">
-                {s.label}
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </section>
+      {/* ─── Dynamic stats (live from backend + GitHub) ─────── */}
+      <DynamicStats />
 
       {/* ─── How it works ───────────────────────────────────── */}
       <section className="px-4 sm:px-6 lg:px-10 py-20 max-w-shell mx-auto border-t border-white/[0.05]">
@@ -603,7 +580,7 @@ export function LandingPage() {
         <div className="mt-12">
           <PricingStrip tiers={PRICING_TIERS} />
         </div>
-        <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+        <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.18em] text-zinc-400">
           No credit card. No trial timer. Cancel by closing the tab.
         </p>
       </section>
@@ -663,6 +640,12 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* ─── Star + Contribute ────────────────────────────── */}
+      <ContributeStrip />
+
+      {/* ─── Powered by ──────────────────────────────────────── */}
+      <PoweredByStrip />
+
       {/* ─── FAQ ────────────────────────────────────────────── */}
       <section
         id="faq"
@@ -670,7 +653,7 @@ export function LandingPage() {
       >
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
           <div className="lg:col-span-4">
-            <Eyebrow index="07" label="Frequently asked" />
+            <Eyebrow index="08" label="Frequently asked" />
             <h2 className="mt-4 font-display font-bold text-display-md tracking-tightest text-white">
               The questions people actually ask.
             </h2>
@@ -699,7 +682,7 @@ export function LandingPage() {
             className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-lime to-transparent"
             aria-hidden
           />
-          <Eyebrow index="08" label="Last step" />
+          <Eyebrow index="09" label="Last step" />
           <h2 className="mt-5 font-display font-bold text-display-xl tracking-tightest max-w-3xl text-white">
             Ready to clean a list?
           </h2>

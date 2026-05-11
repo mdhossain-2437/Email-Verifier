@@ -10,6 +10,39 @@ export function formatBigNumber(n: number): string {
 }
 
 /**
+ * Compact number format for headlines/counters.
+ *
+ *   formatCompact(523)     -> "523"
+ *   formatCompact(1_000)   -> "1K"
+ *   formatCompact(1_234)   -> "1.2K"
+ *   formatCompact(12_345)  -> "12.3K"
+ *   formatCompact(999_999) -> "1M"
+ *   formatCompact(1_234_567) -> "1.2M"
+ *   formatCompact(2_345_678_901) -> "2.3B"
+ *
+ * Drops trailing ``.0`` so a clean thousand shows as ``1K`` (not ``1.0K``).
+ * When ``floor`` is set, values below that floor return ``null`` so the
+ * caller can render a "just getting started" placeholder instead of a
+ * tiny number.
+ */
+export function formatCompact(
+  n: number,
+  opts: { floor?: number } = {},
+): string | null {
+  if (!Number.isFinite(n) || n < 0) return null;
+  if (typeof opts.floor === "number" && n < opts.floor) return null;
+  if (n < 1_000) return Math.round(n).toString();
+
+  const formatScaled = (value: number, suffix: string): string => {
+    const fixed = value.toFixed(1);
+    return fixed.endsWith(".0") ? `${fixed.slice(0, -2)}${suffix}` : `${fixed}${suffix}`;
+  };
+  if (n < 1_000_000) return formatScaled(n / 1_000, "K");
+  if (n < 1_000_000_000) return formatScaled(n / 1_000_000, "M");
+  return formatScaled(n / 1_000_000_000, "B");
+}
+
+/**
  * Human-friendly "5m ago" / "2d ago" string for a unix-seconds timestamp.
  * Returns "—" when the timestamp is null.
  */
