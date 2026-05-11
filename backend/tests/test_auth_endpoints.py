@@ -51,6 +51,28 @@ def test_meta_is_public(client: TestClient):
     assert "supported_extensions" in r.json()
 
 
+def test_stats_public_is_unauthenticated(client: TestClient):
+    """The landing page polls this from a logged-out browser. It must work
+    without any Authorization header and surface a fixed shape so the SPA
+    can render with sane defaults even on a brand-new deploy."""
+    r = client.get("/api/stats/public", headers={"Authorization": ""})
+    assert r.status_code == 200
+    body = r.json()
+    for k in (
+        "total_verified",
+        "total_valid",
+        "completed_lists",
+        "active_lists",
+        "valid_pct",
+        "deploy_tier",
+        "deploy_label",
+        "generated_at",
+    ):
+        assert k in body, f"missing key {k!r} on /api/stats/public"
+    assert isinstance(body["total_verified"], int)
+    assert isinstance(body["generated_at"], int)
+
+
 # ---------------------------------------------------------------------------
 # Protected endpoints require a token
 # ---------------------------------------------------------------------------

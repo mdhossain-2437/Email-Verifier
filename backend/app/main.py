@@ -264,7 +264,7 @@ MAX_UPLOAD_BYTES = _parse_max_upload_bytes()  # 0 = no cap (default)
 # headers — otherwise browsers would see a 401 with no CORS headers and
 # block the real request.
 
-PUBLIC_API_PATHS = {"/api/version", "/api/meta"}
+PUBLIC_API_PATHS = {"/api/version", "/api/meta", "/api/stats/public"}
 
 
 @app.middleware("http")
@@ -637,6 +637,36 @@ def _summarize(results: list[VerificationResult]) -> dict[str, int]:
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok"}
+
+
+@app.get("/api/stats/public")
+async def public_stats_endpoint():
+    """Aggregate, cross-user counters for the public landing page.
+
+    Surfaced unauthenticated because every number here is a deploy-wide
+    total, not a per-user metric. The landing page polls this every 30s
+    and animates the digits up.
+
+    The frontend applies a 1,000-unit floor (anything below shows a
+    "just getting started" placeholder), so it's fine if a fresh deploy
+    has all-zero counters here.
+    """
+    jobs = list(_JOBS.values())
+    total_verified = sum(j.processed for j in jobs)
+    total_valid = sum(j.summary.get("valid", 0) for j in jobs)
+    completed_lists = sum(1 for j in jobs if j.status == "completed")
+    active_lists = sum(1 for j in jobs if j.status in ("queued", "running"))
+    valid_pct = (total_valid / total_verified * 100.0) if total_verified else 0.0
+    return {
+        "total_verified": total_verified,
+        "total_valid": total_valid,
+        "completed_lists": completed_lists,
+        "active_lists": active_lists,
+        "valid_pct": round(valid_pct, 1),
+        "deploy_tier": DEPLOY_TIER,
+        "deploy_label": DEPLOY_LABEL,
+        "generated_at": int(time.time()),
+    }
 
 
 @app.get("/api/version")
