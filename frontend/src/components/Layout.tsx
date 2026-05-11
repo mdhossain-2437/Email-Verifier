@@ -10,6 +10,7 @@
  */
 
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import {
   Bell,
   Code2,
@@ -231,10 +232,16 @@ export function Topbar({
       >
         <Menu className="w-5 h-5" aria-hidden />
       </button>
-      <div className="font-display font-semibold text-white tracking-tight whitespace-nowrap text-sm sm:text-base">
-        <span className="text-lime">Delowar&apos;s</span>
-        <span className="hidden xs:inline"> Email Verifier</span>
-      </div>
+      <Link
+        to="/"
+        className="font-display font-semibold text-white tracking-tight whitespace-nowrap text-sm sm:text-base inline-flex items-baseline gap-1.5 hover:opacity-90"
+        aria-label="Saaf — home"
+      >
+        <span className="text-lime">saaf</span>
+        <span aria-hidden className="hidden xs:inline text-[0.72em] text-zinc-500 font-medium">
+          সাফ
+        </span>
+      </Link>
       <div className="flex-1 hidden md:flex justify-center px-4">
         <div className="relative w-full max-w-md">
           <Search

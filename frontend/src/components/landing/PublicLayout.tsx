@@ -1,10 +1,11 @@
 /**
  * Layout chrome shared by every public marketing page:
  *
- *   - Sticky translucent header with the brand mark, primary nav, and
- *     sign-in / sign-up CTAs.
+ *   - Sticky translucent header with the Saaf brand mark, primary nav,
+ *     and sign-in / sign-up CTAs.
  *   - Mobile menu drawer with the same nav links.
- *   - Footer with grouped link lists, status pill, and copyright.
+ *   - Footer with grouped link lists, a "Built by Delowar Hossain" card,
+ *     social icons, status pill, and copyright.
  *
  * Pages render their content inside ``<PublicLayout>...</PublicLayout>``.
  */
@@ -13,19 +14,32 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import {
   ArrowRight,
+  AtSign,
   Github,
+  Globe,
+  Linkedin,
   Menu,
-  ShieldCheck,
+  Twitter,
   X as XIcon,
 } from "lucide-react";
 
-import { GITHUB_REPO, PORTFOLIO_URL } from "@/lib/uiTypes";
+import { SaafLogo } from "@/components/brand/SaafLogo";
+import {
+  BRAND_BANGLA,
+  BRAND_NAME,
+  BRAND_TAGLINE,
+  CONTACT_EMAIL,
+  GITHUB_REPO,
+  PORTFOLIO_URL,
+  SOCIAL_LINKS,
+} from "@/lib/brand";
 
 const NAV_LINKS: { label: string; to: string }[] = [
   { label: "Features", to: "/features" },
   { label: "Use cases", to: "/use-cases" },
   { label: "Pricing", to: "/pricing" },
   { label: "FAQ", to: "/faq" },
+  { label: "Builder", to: "/builder" },
   { label: "Changelog", to: "/changelog" },
 ];
 
@@ -53,6 +67,7 @@ const FOOTER_GROUPS: { heading: string; links: { label: string; to?: string; hre
     links: [
       { label: "Get started", to: "/signup" },
       { label: "Sign in", to: "/login" },
+      { label: "About the builder", to: "/builder" },
       { label: "Portfolio", href: PORTFOLIO_URL },
     ],
   },
@@ -85,15 +100,21 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   );
 }
 
-function Brand() {
+function Brand({ size = "header" }: { size?: "header" | "footer" }) {
   return (
-    <Link to="/" className="flex items-center gap-2.5 group min-h-[44px]">
-      <span className="w-9 h-9 rounded-2xl bg-lime grid place-items-center text-ink shadow-glow group-hover:scale-105 transition-transform">
-        <ShieldCheck className="w-4.5 h-4.5" strokeWidth={2.4} />
-      </span>
-      <span className="font-display text-sm font-bold tracking-tight">
-        <span className="text-lime">Delowar&apos;s</span> Email Verifier
-      </span>
+    <Link
+      to="/"
+      className="flex items-center gap-2.5 group min-h-[44px]"
+      aria-label={`${BRAND_NAME} — home`}
+    >
+      <SaafLogo
+        variant="lockup"
+        markClassName={
+          size === "header" ? "w-9 h-9 group-hover:scale-105" : "w-10 h-10"
+        }
+        wordmarkClassName={size === "header" ? "text-sm" : "text-base"}
+        inverted
+      />
     </Link>
   );
 }
@@ -217,51 +238,162 @@ function MobileMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
+const SOCIAL_ITEMS: { key: keyof typeof SOCIAL_LINKS; label: string; icon: typeof Github }[] = [
+  { key: "github", label: "GitHub", icon: Github },
+  { key: "twitter", label: "X / Twitter", icon: Twitter },
+  { key: "linkedin", label: "LinkedIn", icon: Linkedin },
+  { key: "email", label: "Email", icon: AtSign },
+  { key: "portfolio", label: "Portfolio", icon: Globe },
+];
+
+function SocialIcons({ size = "md" }: { size?: "sm" | "md" }) {
+  const dim = size === "sm" ? "w-9 h-9" : "w-10 h-10";
+  const icon = size === "sm" ? "w-4 h-4" : "w-4.5 h-4.5";
+  return (
+    <ul className="flex flex-wrap items-center gap-2" aria-label="Social links">
+      {SOCIAL_ITEMS.filter(({ key }) => SOCIAL_LINKS[key]).map(({ key, label, icon: Icon }) => (
+        <li key={key}>
+          <a
+            href={SOCIAL_LINKS[key]}
+            target={SOCIAL_LINKS[key].startsWith("http") ? "_blank" : undefined}
+            rel={SOCIAL_LINKS[key].startsWith("http") ? "noreferrer" : undefined}
+            aria-label={label}
+            title={label}
+            className={`inline-grid place-items-center ${dim} rounded-full border border-white/10 bg-white/[0.03] text-zinc-300 hover:text-lime hover:border-lime/40 hover:bg-lime/5 transition-colors`}
+          >
+            <Icon className={icon} aria-hidden strokeWidth={1.8} />
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function BuiltBy() {
+  return (
+    <div className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-ink-100/70 p-6 sm:p-8 mt-12">
+      <div
+        className="absolute inset-0 opacity-30 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(120% 80% at 100% 0%, rgba(195,244,0,0.10), transparent 60%)",
+        }}
+        aria-hidden
+      />
+      <div className="relative flex flex-col sm:flex-row gap-6 sm:items-center">
+        <a
+          href={PORTFOLIO_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="shrink-0 rounded-2xl overflow-hidden ring-1 ring-white/10 hover:ring-lime/40 transition"
+          aria-label="Visit Delowar Hossain's portfolio"
+        >
+          <picture>
+            <source srcSet="/builder/delowar-avatar.webp" type="image/webp" />
+            <img
+              src="/builder/delowar-avatar.jpg"
+              alt="Delowar Hossain"
+              width={88}
+              height={88}
+              loading="lazy"
+              decoding="async"
+              className="w-22 h-22 sm:w-24 sm:h-24 object-cover"
+              style={{ width: 88, height: 88 }}
+            />
+          </picture>
+        </a>
+        <div className="flex-1 min-w-0 space-y-3">
+          <div className="space-y-1">
+            <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+              Built by
+            </div>
+            <h3 className="font-display text-xl font-bold tracking-tight text-zinc-50">
+              Md Delowar Hossain
+              <span className="ml-2 text-sm font-medium text-zinc-500">
+                · Creative Developer
+              </span>
+            </h3>
+            <p className="text-sm text-zinc-300 leading-relaxed max-w-2xl">
+              Saaf was designed and engineered solo by Delowar — a creative
+              developer and full-stack engineer based in Joypurhat, Bangladesh.
+              He ships editorial UIs, performance-first engineering, and
+              AI-native systems where it counts. Saaf is built so smaller
+              teams don't have to pay enterprise prices to clean an email list.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              to="/builder"
+              className="text-xs font-mono uppercase tracking-[0.18em] text-lime hover:underline inline-flex items-center gap-1"
+            >
+              Read the builder story
+              <ArrowRight className="w-3 h-3" aria-hidden />
+            </Link>
+            <span className="w-px h-4 bg-white/10" aria-hidden />
+            <SocialIcons size="sm" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Footer() {
   return (
     <footer className="border-t border-white/[0.05] mt-24">
-      <div className="px-4 sm:px-6 lg:px-10 py-12 max-w-shell mx-auto grid grid-cols-2 sm:grid-cols-4 gap-10">
-        <div className="col-span-2 sm:col-span-1 space-y-4">
-          <Brand />
-          <p className="text-xs text-zinc-500 leading-relaxed max-w-xs">
-            Clean email lists. Lower bounce rates. Self-host or run on the
-            free tier. Open source under MIT.
-          </p>
-        </div>
-        {FOOTER_GROUPS.map((group) => (
-          <div key={group.heading} className="space-y-3">
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
-              {group.heading}
+      <div className="px-4 sm:px-6 lg:px-10 py-12 max-w-shell mx-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-10">
+          <div className="col-span-2 sm:col-span-1 space-y-4">
+            <Brand size="footer" />
+            <p className="text-xs text-zinc-400 leading-relaxed max-w-xs">
+              {BRAND_BANGLA} — Bangla for "clean". {BRAND_TAGLINE} Open source
+              under MIT. Self-host or run on the free tier.
+            </p>
+            <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-zinc-500">
+              <a
+                href={`mailto:${CONTACT_EMAIL}`}
+                className="hover:text-lime transition-colors"
+              >
+                {CONTACT_EMAIL}
+              </a>
             </div>
-            <ul className="space-y-2">
-              {group.links.map((l) => (
-                <li key={l.label}>
-                  {l.to ? (
-                    <Link
-                      to={l.to}
-                      className="text-sm text-zinc-300 hover:text-lime transition-colors"
-                    >
-                      {l.label}
-                    </Link>
-                  ) : (
-                    <a
-                      href={l.href}
-                      target={l.href?.startsWith("http") ? "_blank" : undefined}
-                      rel={l.href?.startsWith("http") ? "noreferrer" : undefined}
-                      className="text-sm text-zinc-300 hover:text-lime transition-colors"
-                    >
-                      {l.label}
-                    </a>
-                  )}
-                </li>
-              ))}
-            </ul>
           </div>
-        ))}
+          {FOOTER_GROUPS.map((group) => (
+            <div key={group.heading} className="space-y-3">
+              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                {group.heading}
+              </div>
+              <ul className="space-y-2">
+                {group.links.map((l) => (
+                  <li key={l.label}>
+                    {l.to ? (
+                      <Link
+                        to={l.to}
+                        className="text-sm text-zinc-300 hover:text-lime transition-colors"
+                      >
+                        {l.label}
+                      </Link>
+                    ) : (
+                      <a
+                        href={l.href}
+                        target={l.href?.startsWith("http") ? "_blank" : undefined}
+                        rel={l.href?.startsWith("http") ? "noreferrer" : undefined}
+                        className="text-sm text-zinc-300 hover:text-lime transition-colors"
+                      >
+                        {l.label}
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <BuiltBy />
       </div>
       <div className="px-4 sm:px-6 lg:px-10 pb-10 max-w-shell mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="font-mono uppercase tracking-[0.18em] text-zinc-500">
-          © {new Date().getFullYear()} Delowar Hossain · MIT License
+          © {new Date().getFullYear()} Delowar Hossain · {BRAND_NAME.toUpperCase()} · MIT License
         </div>
         <div className="font-mono uppercase tracking-[0.18em] text-zinc-500 flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full bg-lime pulse-soft" aria-hidden />

@@ -23,7 +23,7 @@ const TAG_STYLES: Record<ChangelogEntry["tag"], string> = {
 
 export function ChangelogPage() {
   useEffect(() => {
-    document.title = "Changelog · Delowar's Email Verifier";
+    document.title = "Changelog · Saaf";
   }, []);
   return (
     <PublicLayout>

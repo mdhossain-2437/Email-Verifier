@@ -41,7 +41,7 @@ export function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    document.title = "Settings · Delowar's Email Verifier";
+    document.title = "Settings · Saaf";
   }, []);
 
   useEffect(() => {

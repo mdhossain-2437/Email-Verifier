@@ -109,7 +109,7 @@ const GROUPS = [
 
 export function FaqPage() {
   useEffect(() => {
-    document.title = "FAQ · Delowar's Email Verifier";
+    document.title = "FAQ · Saaf";
   }, []);
   return (
     <PublicLayout>

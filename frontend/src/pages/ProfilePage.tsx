@@ -72,7 +72,7 @@ export function ProfilePage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
-    document.title = "Profile · Delowar's Email Verifier";
+    document.title = "Profile · Saaf";
   }, []);
 
   const refresh = async () => {

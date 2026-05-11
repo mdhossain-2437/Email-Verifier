@@ -50,6 +50,7 @@ import { FeaturesPage } from "@/pages/public/FeaturesPage";
 import { UseCasesPage } from "@/pages/public/UseCasesPage";
 import { FaqPage } from "@/pages/public/FaqPage";
 import { ChangelogPage } from "@/pages/public/ChangelogPage";
+import { BuilderPage } from "@/pages/public/BuilderPage";
 import { ErrorBoundary, PanelErrorBoundary } from "@/components/ErrorBoundary";
 import { ServerStatusBanner } from "@/components/ServerStatusBanner";
 import { RouteFallback } from "@/components/common";
@@ -114,6 +115,8 @@ export default function App() {
             <Route path="/use-cases" element={<UseCasesPage />} />
             <Route path="/faq" element={<FaqPage />} />
             <Route path="/changelog" element={<ChangelogPage />} />
+            <Route path="/builder" element={<BuilderPage />} />
+            <Route path="/about-builder" element={<Navigate to="/builder" replace />} />
             <Route path="/login" element={<PublicOnly><LoginPage /></PublicOnly>} />
             <Route path="/signup" element={<PublicOnly><SignupPage /></PublicOnly>} />
             <Route

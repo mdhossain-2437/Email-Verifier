@@ -136,7 +136,7 @@ const TRUST_LOGOS = [
 ];
 
 const COMPARISON_COLUMNS = [
-  { name: "Delowar's Email Verifier", caption: "open source", highlight: true },
+  { name: "Saaf", caption: "open source · free tier", highlight: true },
   { name: "Hosted competitor A", caption: "$0.008/email" },
   { name: "Hosted competitor B", caption: "$0.005/email" },
 ];
@@ -321,7 +321,7 @@ export function LandingPage() {
   const [loadingVersion, setLoadingVersion] = useState(true);
 
   useEffect(() => {
-    document.title = "Delowar's Email Verifier — clean lists, fewer bounces.";
+    document.title = "Saaf — Clean email lists, fast.";
   }, []);
 
   useEffect(() => {

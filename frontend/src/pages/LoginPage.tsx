@@ -4,7 +4,7 @@ import { AuthForm } from "./AuthForm";
 
 export function LoginPage() {
   useEffect(() => {
-    document.title = "Sign in · Delowar's Email Verifier";
+    document.title = "Sign in · Saaf";
   }, []);
   return (
     <AuthForm

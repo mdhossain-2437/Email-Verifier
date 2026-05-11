@@ -1,14 +1,18 @@
 {
-  "name": "Delowar's Email Verifier",
-  "short_name": "Email Verifier",
-  "description": "Extract, validate, and de-risk email addresses at scale. Multi-format ingest, DNS + SMTP verification, country/provider classification, bulk processing up to 100k per job, and a BYOL Lead Finder.",
+  "name": "Saaf — Clean email lists, fast.",
+  "short_name": "Saaf",
+  "description": "Paste a list. We check every address against the real mail server. You get a clean CSV back — no dead weight, no bounces. Free tier up to 100,000 addresses per job, open source, self-host ready.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0b0d18",
-  "theme_color": "#0b0d18",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "background_color": "#0e0e0e",
+  "theme_color": "#0e0e0e",
   "orientation": "any",
-  "categories": ["productivity", "business", "developer"],
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["productivity", "business", "developer", "marketing"],
   "icons": [
     {
       "src": "/favicon.svg",
@@ -17,10 +21,51 @@
       "purpose": "any"
     },
     {
-      "src": "/favicon.svg",
-      "type": "image/svg+xml",
-      "sizes": "any",
+      "src": "/favicon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/maskable-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
       "purpose": "maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Verify a single email",
+      "short_name": "Verify",
+      "description": "Open the inspector to check one address.",
+      "url": "/app/inspector",
+      "icons": [{ "src": "/favicon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Bulk verify a CSV",
+      "short_name": "Bulk",
+      "description": "Upload a list and clean it.",
+      "url": "/app/jobs",
+      "icons": [{ "src": "/favicon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Find work emails",
+      "short_name": "Lead Finder",
+      "description": "Pattern-based work-email finder.",
+      "url": "/app/leads",
+      "icons": [{ "src": "/favicon-192.png", "sizes": "192x192" }]
     }
   ]
 }

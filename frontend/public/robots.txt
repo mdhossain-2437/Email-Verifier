@@ -3,7 +3,11 @@ Allow: /
 Disallow: /api/
 Disallow: /docs
 Disallow: /openapi.json
+Disallow: /app/
 
-# Email Verifier — open source, ToS-respecting tool.
-# Scraping is intentionally absent; this app verifies addresses
-# you supply, it does not collect them from the public web.
+# Saaf — সাফ — clean email lists, fast.
+# Open source, ToS-respecting tool. Scraping is intentionally absent:
+# this app verifies addresses you supply, it does not collect them
+# from the public web.
+
+Sitemap: https://saaf.email/sitemap.xml
