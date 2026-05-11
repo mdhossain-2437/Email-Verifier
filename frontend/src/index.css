@@ -82,4 +82,66 @@
   .hairline {
     @apply border-white/[0.06];
   }
+
+  /* Small pulse used on live-status dots. */
+  .pulse-soft {
+    animation: pulse-soft 2.2s ease-in-out infinite;
+  }
+
+  /* Grid + glow backdrop helpers used by the landing pages. */
+  .bg-grid {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    background-size: 56px 56px;
+    background-position: -1px -1px;
+  }
+  .bg-glow {
+    background:
+      radial-gradient(60% 60% at 30% 30%, rgba(195, 244, 0, 0.06), transparent 70%),
+      radial-gradient(50% 50% at 70% 70%, rgba(195, 244, 0, 0.03), transparent 70%);
+  }
+}
+
+@layer utilities {
+  /* Awwwards-style infinite marquee. Pure CSS, GPU-friendly. */
+  .marquee-track {
+    animation: marquee linear infinite;
+  }
+  /* Smooth hover scrolling on landing pages. */
+  .scroll-smooth-y {
+    scroll-behavior: smooth;
+  }
+  /* Subtle text-stroke fallback for big display headings. */
+  .text-stroke-lime {
+    -webkit-text-stroke: 1px rgba(195, 244, 0, 0.6);
+    color: transparent;
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes pulse-soft {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track,
+  .pulse-soft {
+    animation: none !important;
+  }
 }

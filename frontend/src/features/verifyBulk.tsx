@@ -230,7 +230,7 @@ function AdvancedFilters({
             ref={searchRef}
             value={filters.query}
             onChange={(e) => setFilters({ ...filters, query: e.target.value })}
-            placeholder="Search email, domain, provider, country, reason..."
+            placeholder="Search by email, domain, provider, country, or reason…"
             className="w-full pl-9 pr-3 py-2 rounded-xl bg-ink/60 border border-white/[0.08] text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-lime/40 focus:outline-none min-h-[40px]"
           />
         </div>
@@ -345,24 +345,24 @@ function VerifyOptionsCard({
     <div className="rounded-xl border border-white/[0.06] bg-ink-100/60 p-4">
       <div className="flex items-center gap-2 mb-3 text-zinc-300">
         <Settings2 className="w-4 h-4" />
-        <span className="text-sm font-medium">Verification settings</span>
+        <span className="text-sm font-medium">How thorough to be</span>
       </div>
       <div className="grid sm:grid-cols-3 gap-4">
         <Toggle
-          label="MX record check"
+          label="Check the domain"
           checked={checkMx}
           onChange={setCheckMx}
-          hint="Resolve DNS to confirm the domain accepts mail."
+          hint="Confirm the company's mail server is real and accepting email."
         />
         <Toggle
-          label="Live SMTP probe"
+          label="Knock on the mailbox"
           checked={checkSmtp}
           onChange={setCheckSmtp}
-          hint="Open SMTP and ask if mailbox accepts RCPT TO. Slow & may be blocked."
+          hint="Ask the server if the inbox actually exists. More accurate but slower; some servers block this."
         />
         <div>
           <div className="text-sm text-zinc-200 mb-1">
-            Concurrency: <span className="text-lime font-mono">{concurrency}</span>
+            Speed: <span className="text-lime font-mono">{concurrency}</span> checks in parallel
           </div>
           <input
             type="range"
@@ -372,7 +372,7 @@ function VerifyOptionsCard({
             onChange={(e) => setConcurrency(parseInt(e.target.value, 10))}
             className="w-full accent-lime"
           />
-          <div className="text-xs text-zinc-500">Higher = faster but more DNS pressure.</div>
+          <div className="text-xs text-zinc-400">Higher = finishes faster, but uses more bandwidth.</div>
         </div>
       </div>
     </div>
@@ -402,32 +402,32 @@ function PreCleanPanel({
     <div className="rounded-xl border border-white/[0.06] bg-ink-100/60 p-4">
       <div className="flex items-center gap-2 mb-3 text-zinc-300">
         <Filter className="w-4 h-4" />
-        <span className="text-sm font-medium">Pre-clean before verifying</span>
+        <span className="text-sm font-medium">Tidy the list before we start</span>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Toggle
-          label="Drop duplicates"
+          label="Remove duplicates"
           checked={dropDuplicates}
           onChange={setDropDuplicates}
-          hint="Same address only verified once."
+          hint="If the same email appears twice, we only check it once."
         />
         <Toggle
-          label="Drop invalid syntax"
+          label="Skip broken addresses"
           checked={dropInvalid}
           onChange={setDropInvalid}
-          hint="Skip strings that aren't even email-shaped."
+          hint="Drop things that don't even look like an email (missing @, bad format)."
         />
         <Toggle
-          label="Drop disposable"
+          label="Skip temp mail"
           checked={dropDisposable}
           onChange={setDropDisposable}
-          hint="Skip mailinator, guerrillamail, tempmail, etc."
+          hint="Drop throwaway addresses from sites like Mailinator and Guerrilla Mail."
         />
         <Toggle
-          label="Drop role accounts"
+          label="Skip shared inboxes"
           checked={dropRole}
           onChange={setDropRole}
-          hint="Skip admin@, support@, info@, noreply@..."
+          hint="Drop generic role addresses like admin@, support@, info@, noreply@."
         />
       </div>
     </div>
@@ -1045,12 +1045,11 @@ export function VerifyBulkTab({
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Paste emails - one per line, or comma/space separated. Up to 100,000 per job."
+            placeholder="Paste your emails here — one per line, or split by commas or spaces. Up to 100,000 at a time."
             className="w-full h-44 rounded-xl border border-white/[0.08] bg-ink/40 px-4 py-3 text-sm font-mono text-zinc-100 placeholder:text-zinc-500 resize-none focus:border-lime/40"
           />
           <div className="text-xs text-zinc-500">
-            Tip: drop a CSV/XLSX/TXT file on the right and we&apos;ll extract addresses, pre-clean
-            them, and queue a verification job in one shot.
+            Tip: drop a CSV, Excel, or text file on the right — we'll pull the emails out, clean up duplicates, and start checking them automatically.
           </div>
         </div>
         <FileDropZone

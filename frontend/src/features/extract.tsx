@@ -70,7 +70,7 @@ export function ExtractTab({
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Paste any text - emails, raw HTML, log files. Supports patterns like 'name [at] example [dot] com'."
+            placeholder="Paste anything — text, HTML, log files, even obfuscated forms like 'name [at] example [dot] com'. We'll pull every email address out."
             className="w-full h-56 rounded-xl border border-white/[0.08] bg-ink/40 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-500 font-mono resize-none focus:border-lime/40"
           />
           <div className="flex flex-wrap items-center gap-2">

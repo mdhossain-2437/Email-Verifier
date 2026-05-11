@@ -142,8 +142,8 @@ export function LeadFinderView() {
     return (
       <div className="space-y-6">
         <PageHeader
-          title="Targeted Lead Finder"
-          subtitle="Bring-your-own-targets pattern lookup. Generates likely work-email patterns and verifies them on the fly."
+          title="Find work emails"
+          subtitle="Give us a person + company + domain you can legitimately reach out to. We'll guess the most likely work email patterns and check each one for you."
         />
         <FeatureUnavailableCard
           Icon={ShieldAlert}
@@ -175,8 +175,8 @@ export function LeadFinderView() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Targeted Lead Finder"
-        subtitle="Bring-your-own-targets pattern lookup. Paste names + companies + domains you have a legitimate business reason to contact, and we'll generate the most likely work-email patterns and verify them. No Google dorks. No LinkedIn scraping. Pure pattern + DNS."
+        title="Find work emails"
+        subtitle="Give us a person + company + domain you can legitimately reach out to. We'll guess the most likely work email patterns (like firstname@, first.last@, finitial.last@) and check each one against the real mail server. No scraping — we don't look people up, we just check the patterns you supply."
       />
 
       <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] p-4 text-sm text-amber-100/90 flex gap-3">

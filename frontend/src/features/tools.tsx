@@ -74,8 +74,8 @@ export function ToolsMarketplaceView({ onGo }: { onGo: (t: Tab) => void }) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Tools Marketplace"
-        subtitle="Every tool in this app, lined up for quick navigation. Each card opens the same workflow you'd find in the sidebar — this is just a faster on-ramp when you know what you need."
+        title="All tools, one place"
+        subtitle="Every feature in the app, in card form. Tap a card to jump straight into that tool — handy when you know exactly what you need but don't want to scan the sidebar."
       />
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {cards.map((c) => {
