@@ -73,6 +73,41 @@ def test_stats_public_is_unauthenticated(client: TestClient):
     assert isinstance(body["generated_at"], int)
 
 
+def test_stats_public_counts_done_jobs_not_completed_typo(client: TestClient):
+    """Regression: ``completed_lists`` used to filter on ``status=="completed"``
+    but jobs are saved with ``status=="done"``, so the counter was stuck at 0
+    no matter how many jobs the deploy ran. Adding a ``done`` job to the
+    in-memory store must bump ``completed_lists`` to 1."""
+    from app import main as app_main
+    from app.main import Job
+
+    sentinel_id = "stats-typo-regression-test"
+    app_main._JOBS[sentinel_id] = Job(  # ty: ignore[call-arg]
+        id=sentinel_id,
+        uid="alice-uid",
+        status="done",
+        total=10,
+        processed=10,
+        summary={"valid": 7, "invalid": 3},
+        results=[],
+        started_at=1.0,
+        finished_at=2.0,
+        error=None,
+    )
+    try:
+        r = client.get("/api/stats/public", headers={"Authorization": ""})
+        body = r.json()
+        # Backend in test mode has no Firestore creds, so this exercises
+        # the in-memory fallback path — exactly where the typo lived.
+        assert body["completed_lists"] >= 1, (
+            f"completed_lists should count 'done' jobs but got {body['completed_lists']}"
+        )
+        assert body["total_verified"] >= 10
+        assert body["total_valid"] >= 7
+    finally:
+        app_main._JOBS.pop(sentinel_id, None)
+
+
 # ---------------------------------------------------------------------------
 # Protected endpoints require a token
 # ---------------------------------------------------------------------------

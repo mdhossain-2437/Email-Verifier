@@ -5,9 +5,12 @@
  *   1. ``/api/stats/public`` — total verified, lists cleaned, accuracy
  *   2. GitHub REST API — star count
  *
- * All numbers run through ``formatCompact`` with a 1,000-unit floor.
- * Values below 1,000 show a "just getting started" placeholder
- * instead of an awkwardly small number.
+ * Numbers run through ``formatCompact``. The "Emails verified" and
+ * "Lists cleaned" cards always show the real count when the backend
+ * is reachable (down to 1) — a fresh deploy showing "3 emails verified"
+ * is more honest than "—". The "Accuracy" card needs a meaningful
+ * sample size to avoid showing 100% off a single verification, so it
+ * keeps a 50-unit floor and degrades to the placeholder below that.
  *
  * When both APIs are down the entire strip gracefully hides.
  */
@@ -21,7 +24,9 @@ import { usePublicStats } from "@/lib/usePublicStats";
 import { GITHUB_REPO } from "@/lib/uiTypes";
 import { NumberCounter } from "./NumberCounter";
 
-const FLOOR = 1_000;
+// Accuracy needs a meaningful sample before "100%" stops being
+// statistical noise. Other counters render real values immediately.
+const ACCURACY_FLOOR = 50;
 const editorialEase: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
 const reveal: Variants = {
   hidden: { opacity: 0, y: 24 },
@@ -46,11 +51,22 @@ interface StatCardProps {
   value: string | null;
   label: string;
   numericValue?: number;
+  // Animate the counter from 0 only past this threshold; below it we
+  // render the value as static text so a "3" doesn't roll up dramatically.
+  counterThreshold?: number;
   index: number;
 }
 
-function StatCard({ icon: Icon, value, label, numericValue, index }: StatCardProps) {
-  const showCounter = numericValue !== undefined && numericValue >= FLOOR;
+function StatCard({
+  icon: Icon,
+  value,
+  label,
+  numericValue,
+  counterThreshold = 100,
+  index,
+}: StatCardProps) {
+  const showCounter =
+    numericValue !== undefined && numericValue >= counterThreshold;
   return (
     <motion.div
       initial="hidden"
@@ -88,10 +104,13 @@ export function DynamicStats() {
   const backend = usePublicStats();
   const gh = useGitHubStats({ repo: repoPath() });
 
-  const verifiedCompact = formatCompact(backend?.total_verified ?? 0, { floor: FLOOR });
-  const listsCompact = formatCompact(backend?.completed_lists ?? 0, { floor: FLOOR });
-  const starsCompact = formatCompact(gh?.stars ?? 0, { floor: 0 });
-  const accuracy = backend && backend.total_verified >= FLOOR
+  // Show real counts down to 1 — a fresh deploy showing "3 emails verified"
+  // is more honest than a placeholder. Accuracy still needs a sample size
+  // to avoid "100%" from a single verification.
+  const verifiedCompact = formatCompact(backend?.total_verified ?? 0, { floor: 1 });
+  const listsCompact = formatCompact(backend?.completed_lists ?? 0, { floor: 1 });
+  const starsCompact = formatCompact(gh?.stars ?? 0, { floor: 1 });
+  const accuracy = backend && backend.total_verified >= ACCURACY_FLOOR
     ? `${backend.valid_pct}%`
     : null;
 

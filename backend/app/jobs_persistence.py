@@ -129,6 +129,48 @@ def list_jobs(uid: Optional[str] = None, *, limit: int = 50) -> list[dict]:
         return []
 
 
+def aggregate_public_stats() -> Optional[dict]:
+    """Aggregate cross-user, cross-machine job counters from Firestore for
+    the public landing page. Returns ``None`` when Firestore is unavailable
+    (caller falls back to in-memory ``_JOBS`` totals from one machine).
+
+    Each Fly machine sees only its own in-memory ``_JOBS`` dict; Firestore
+    is the only place that holds the union of every job ever submitted.
+    Streaming the ``jobs`` collection avoids the missing-results problem
+    (results aren't on these docs anyway — see ``_job_to_doc``) and is
+    cheap because we only need the small metadata fields.
+    """
+    db = auth.firestore_db()
+    if db is None:
+        return None
+    total_verified = 0
+    total_valid = 0
+    completed_lists = 0
+    active_lists = 0
+    try:
+        for doc in db.collection(_JOBS_COLLECTION).stream():
+            data = doc.to_dict() or {}
+            total_verified += int(data.get("processed", 0) or 0)
+            summary = data.get("summary") or {}
+            total_valid += int(summary.get("valid", 0) or 0)
+            status = data.get("status")
+            if status == "done":
+                completed_lists += 1
+            elif status in ("queued", "running"):
+                active_lists += 1
+    except Exception:  # noqa: BLE001
+        logger.exception("Firestore aggregate_public_stats failed")
+        return None
+    valid_pct = (total_valid / total_verified * 100.0) if total_verified else 0.0
+    return {
+        "total_verified": total_verified,
+        "total_valid": total_valid,
+        "completed_lists": completed_lists,
+        "active_lists": active_lists,
+        "valid_pct": round(valid_pct, 1),
+    }
+
+
 def mark_interrupted_on_startup() -> int:
     """Find jobs that were ``running`` or ``queued`` at the time of the
     last restart and flip them to ``interrupted``. Called once at app
