@@ -127,3 +127,4 @@ defaults; the deploy-recipe README lists which ones are *required* per host.
 | `EMAIL_VERIFIER_ENABLE_SMTP`         | optional | optional | optional | n/a | Tier 4 always disables SMTP. |
 | `WEB_CONCURRENCY`                    | `1`    | `1`    | `1`    | n/a | `_JOBS` registry is in-memory. |
 | `FIREBASE_ADMIN_CREDENTIALS`         | required | required | required | required | Service-account JSON, single-line. |
+| `FIREBASE_STORAGE_BUCKET`            | optional | optional | optional | optional | Auto-derived from project_id when unset. Enables multi-machine `/results.csv` downloads via Firebase Storage blobs. |
