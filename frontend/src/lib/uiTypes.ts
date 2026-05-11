@@ -12,6 +12,7 @@ export type Tab =
   | "command-center"
   | "verify-bulk"
   | "lead-finder"
+  | "permutator"
   | "extract"
   | "verify-one"
   | "tools"
@@ -29,6 +30,7 @@ export const TAB_TO_PATH: Record<Tab, string> = {
   "command-center": "",
   "verify-bulk": "jobs",
   "lead-finder": "leads",
+  permutator: "permutator",
   extract: "extract",
   "verify-one": "inspector",
   tools: "tools",
@@ -47,6 +49,7 @@ export const PAGE_TITLES: Record<Tab, string> = {
   "command-center": "Dashboard · Saaf",
   "verify-bulk": "Bulk verify · Saaf",
   "lead-finder": "Find work emails · Saaf",
+  permutator: "Email Permutator · Saaf",
   extract: "Extract emails · Saaf",
   "verify-one": "Single inspector · Saaf",
   tools: "All tools · Saaf",

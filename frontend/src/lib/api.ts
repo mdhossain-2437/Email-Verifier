@@ -210,6 +210,26 @@ export interface LeadFinderResponse {
   results: LeadFinderResultRow[];
 }
 
+export interface PermutatorCandidate {
+  pattern: string;
+  email: string;
+  confidence: number;
+  status: Status | null;
+  reason: string | null;
+  has_mx: boolean | null;
+}
+
+export interface PermutatorResponse {
+  name: string;
+  domain: string;
+  count: number;
+  elapsed_ms: number;
+  candidates: PermutatorCandidate[];
+  best_email: string | null;
+  best_pattern: string | null;
+  notes: string[];
+}
+
 export interface ApiKey {
   id: string;
   prefix: string;
@@ -744,6 +764,12 @@ export const api = {
         check_mx: opts.check_mx ?? true,
         check_smtp: opts.check_smtp ?? false,
       }),
+    }),
+
+  permutator: (name: string, domain: string, verify = false) =>
+    request<PermutatorResponse>("/api/permutator", {
+      method: "POST",
+      body: JSON.stringify({ name, domain, verify }),
     }),
 
   whoami: () => request<UserProfile>("/api/whoami"),
