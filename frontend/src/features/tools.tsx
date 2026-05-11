@@ -9,6 +9,7 @@ import {
   Database,
   Filter,
   LayoutDashboard,
+  Shuffle,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -55,6 +56,14 @@ export function ToolsMarketplaceView({ onGo }: { onGo: (t: Tab) => void }) {
       body: "Bring-your-own-targets pattern discovery: paste (name, company, domain) and we generate + verify the most likely work email. No scraping.",
       icon: Users,
       go: "lead-finder",
+    },
+    {
+      key: "permutator",
+      title: "Email Permutator",
+      body: "Pop a name and a work domain in — get every plausible corporate email pattern (firstname.lastname@, flast@, jdoe@…) in one click. Optional MX check.",
+      icon: Shuffle,
+      go: "permutator",
+      badge: "NEW",
     },
     {
       key: "api",

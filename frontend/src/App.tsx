@@ -76,6 +76,9 @@ const VerifyBulkTab = lazy(() =>
 const LeadFinderView = lazy(() =>
   import("@/features/leadFinder").then((m) => ({ default: m.LeadFinderView })),
 );
+const PermutatorTab = lazy(() =>
+  import("@/features/permutator").then((m) => ({ default: m.PermutatorTab })),
+);
 const ExtractTab = lazy(() =>
   import("@/features/extract").then((m) => ({ default: m.ExtractTab })),
 );
@@ -227,6 +230,11 @@ function AppShell() {
         "Upload large lists for high-throughput validation and cleaning. CSV / XLSX / TXT / JSON / .mbox / .eml — the whole catalog from /api/meta is accepted.",
     },
     "lead-finder": { title: "Targeted Lead Finder", subtitle: "" },
+    permutator: {
+      title: "Email Permutator",
+      subtitle:
+        "Type a name and a work domain — get every plausible corporate email pattern (firstname.lastname@, flast@, jdoe@…). Copy the list into your CRM or optionally MX-check each one in place.",
+    },
     extract: {
       title: "Email Extractor",
       subtitle:
@@ -258,6 +266,7 @@ function AppShell() {
   const eyebrows: Partial<Record<Tab, string>> = {
     "verify-bulk": "/ 02 — Verify · bulk",
     "lead-finder": "/ 03 — Discover",
+    permutator: "/ 03b — Permute",
     extract: "/ 04 — Extract",
     "verify-one": "/ 05 — Inspect",
     keys: "/ 06 — Access",
@@ -329,6 +338,16 @@ function AppShell() {
                 </div>
               )}
               {tab === "lead-finder" && <LeadFinderView />}
+              {tab === "permutator" && (
+                <div className="space-y-6">
+                  <PageHeader
+                    eyebrow={eyebrows[tab]}
+                    title={titles[tab].title}
+                    subtitle={titles[tab].subtitle}
+                  />
+                  <PermutatorTab />
+                </div>
+              )}
               {tab === "extract" && (
                 <div className="space-y-6">
                   <PageHeader eyebrow={eyebrows[tab]} title={titles[tab].title} subtitle={titles[tab].subtitle} />

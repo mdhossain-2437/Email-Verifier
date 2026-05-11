@@ -90,8 +90,15 @@ export function PublicLayout({ children }: { children: ReactNode }) {
     };
   }, [open]);
 
+  // `overflow-x-clip` (not `overflow-x-hidden`) prevents horizontal scroll
+  // from rogue children WITHOUT creating a new scrolling formatting
+  // context. Using `overflow-x-hidden` here silently breaks `position:
+  // sticky` on the nested <Header> in some browsers (the sticky element's
+  // containing block becomes this wrapper instead of the viewport), which
+  // is what made the landing-page navbar appear to "stick then come
+  // unstuck" mid-scroll.
   return (
-    <div className="relative min-h-screen text-zinc-100 bg-ink overflow-x-hidden">
+    <div className="relative min-h-screen text-zinc-100 bg-ink overflow-x-clip">
       <Header onOpen={() => setOpen(true)} />
       <MobileMenu open={open} onClose={() => setOpen(false)} />
       <main>{children}</main>

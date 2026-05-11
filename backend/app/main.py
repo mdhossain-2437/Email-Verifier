@@ -41,7 +41,7 @@ from .auth import get_current_user, resolve_authorization
 from .disposable import is_disposable, is_role
 from .extractor import extract_emails, extract_unique
 from .files import extract_from_file, supported_extensions
-from .lead_finder import LeadInput, verify_lead
+from .lead_finder import LeadInput, generate_candidates, verify_lead
 from .lead_providers import registry as lead_registry, find_leads_multi
 from .locale import country_for_domain
 from .providers import provider_for_domain
@@ -449,6 +449,76 @@ class LeadFinderResponse(BaseModel):
     count: int
     elapsed_ms: float
     results: list[LeadFinderResultRow]
+
+
+# ---------------------------------------------------------------------------
+# Permutator request / response models
+# ---------------------------------------------------------------------------
+#
+# The Permutator is the "I know who I want to email, give me every plausible
+# work address" tool. It's strictly a single-target wrapper around the same
+# pattern engine the Lead Finder uses, but it (a) emits *all* generated
+# variants instead of just the top 8, (b) leaves verification optional so
+# users can get instant pattern lists without burning DNS/SMTP budget on
+# every keystroke, and (c) takes a single record so the UI form stays
+# trivial. The endpoint is intentionally not auth-gated — it does no DNS
+# or SMTP work unless ``verify=True`` is passed, and even then it's the
+# same rate budget as ``/api/verify``.
+
+
+class PermutatorRequest(BaseModel):
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="Person's full name. 'First [Middle] Last' format works "
+        "best; single-word names skip last-name patterns. We strip accents "
+        "(José → jose) and ignore non-ASCII punctuation.",
+    )
+    domain: str = Field(
+        ...,
+        min_length=3,
+        max_length=253,
+        description="Work email domain (e.g. 'acme.com'). URLs / @-prefixes / "
+        "leading 'www.' are normalised away client-side.",
+    )
+    verify: bool = Field(
+        False,
+        description="Run each candidate through the MX-check pipeline. False "
+        "(default) returns instantly with pure pattern variants; True takes "
+        "a few seconds and tags each with valid / risky / invalid.",
+    )
+
+
+class PermutatorCandidate(BaseModel):
+    pattern: str = Field(..., description="Pattern name, e.g. 'first.last'.")
+    email: str = Field(..., description="Generated email address.")
+    confidence: float = Field(
+        ...,
+        description="Prior weight for this pattern (0..1, sums roughly to 1 "
+        "across patterns). Higher = industry-observed more common.",
+    )
+    status: Optional[str] = Field(
+        None,
+        description="Set when ``verify=True``: valid / invalid / risky / unknown.",
+    )
+    reason: Optional[str] = Field(
+        None, description="When ``verify=True``: why we classified it this way."
+    )
+    has_mx: Optional[bool] = Field(
+        None, description="When ``verify=True``: whether the domain has any MX records."
+    )
+
+
+class PermutatorResponse(BaseModel):
+    name: str
+    domain: str
+    count: int
+    elapsed_ms: float
+    candidates: list[PermutatorCandidate]
+    best_email: Optional[str] = None
+    best_pattern: Optional[str] = None
+    notes: list[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -1436,6 +1506,68 @@ async def _serve_job_results(job_id: str, fmt: str, status: Optional[str], reque
     data = _results_to_xlsx(flat)
     return StreamingResponse(
         iter([data]), media_type=_FORMAT_MEDIA[fmt], headers=headers
+    )
+
+
+@app.post("/api/permutator", response_model=PermutatorResponse)
+async def permutator_endpoint(req: PermutatorRequest):
+    """Generate every common email pattern for a (name, domain) pair.
+
+    This is the focused single-target counterpart to ``/api/lead-finder``.
+    Unlike Lead Finder it (a) returns *all* generated variants — not just
+    the top 8 — so users can copy the full list into their CRM, and (b)
+    skips DNS/SMTP work by default for instant response.
+
+    Set ``verify=true`` to additionally MX-check every candidate. The
+    expensive SMTP probe is intentionally left off — it's noisy and many
+    mail hosts deliberately accept-then-bounce. Use ``/api/verify`` on
+    the best-looking candidate if you need the SMTP signal.
+    """
+    started = time.perf_counter()
+    lead = LeadInput(name=req.name, company=None, domain=req.domain)
+
+    notes: list[str] = []
+    if req.verify:
+        # Verify all patterns (no max_candidates cap — caller asked for
+        # everything). check_smtp stays off; MX check is the high-signal,
+        # low-cost discriminator.
+        result = await verify_lead(
+            lead, check_mx=True, check_smtp=False, max_candidates=99
+        )
+        candidates_data = result.candidates
+        best = result.best
+        notes = list(result.notes)
+    else:
+        # Skip verification entirely — emit raw pattern list. This is the
+        # default because most users want the candidate list as a copy-and-
+        # paste artefact (feed it into their CRM, drip campaign, etc.) and
+        # don't want to wait on DNS.
+        candidates_data = generate_candidates(lead)
+        best = candidates_data[0] if candidates_data else None
+        if not candidates_data:
+            notes.append("name or domain is empty / unparseable")
+
+    candidates = [
+        PermutatorCandidate(
+            pattern=c.pattern,
+            email=c.email,
+            confidence=c.confidence,
+            status=c.verification.status if c.verification else None,
+            reason=c.verification.reason if c.verification else None,
+            has_mx=c.verification.has_mx if c.verification else None,
+        )
+        for c in candidates_data
+    ]
+
+    return PermutatorResponse(
+        name=req.name,
+        domain=req.domain,
+        count=len(candidates),
+        elapsed_ms=(time.perf_counter() - started) * 1000,
+        candidates=candidates,
+        best_email=best.email if best else None,
+        best_pattern=best.pattern if best else None,
+        notes=notes,
     )
 
 
