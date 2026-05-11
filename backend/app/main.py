@@ -647,22 +647,34 @@ async def public_stats_endpoint():
     total, not a per-user metric. The landing page polls this every 30s
     and animates the digits up.
 
-    The frontend applies a 1,000-unit floor (anything below shows a
-    "just getting started" placeholder), so it's fine if a fresh deploy
-    has all-zero counters here.
+    Prefers the Firestore cross-machine aggregation (so Fly's 2-machine
+    pool produces the union of both machines' jobs, not the LB-roulette
+    subset that landed on whichever node served this request). Falls
+    back to the in-memory ``_JOBS`` snapshot when Firestore is offline so
+    the endpoint never 5xx's — a wrong-direction undercount is still
+    better than a hard failure on a landing-page widget.
     """
-    jobs = list(_JOBS.values())
-    total_verified = sum(j.processed for j in jobs)
-    total_valid = sum(j.summary.get("valid", 0) for j in jobs)
-    completed_lists = sum(1 for j in jobs if j.status == "completed")
-    active_lists = sum(1 for j in jobs if j.status in ("queued", "running"))
-    valid_pct = (total_valid / total_verified * 100.0) if total_verified else 0.0
+    agg = jobs_persistence.aggregate_public_stats()
+    if agg is None:
+        # Firestore unavailable — fall back to the current machine's
+        # in-memory snapshot. Note the ``"done"`` status check (NOT
+        # ``"completed"`` — that was a pre-existing typo that wedged
+        # ``completed_lists`` to 0 on every deploy).
+        jobs = list(_JOBS.values())
+        total_verified = sum(j.processed for j in jobs)
+        total_valid = sum(j.summary.get("valid", 0) for j in jobs)
+        completed_lists = sum(1 for j in jobs if j.status == "done")
+        active_lists = sum(1 for j in jobs if j.status in ("queued", "running"))
+        valid_pct = (total_valid / total_verified * 100.0) if total_verified else 0.0
+        agg = {
+            "total_verified": total_verified,
+            "total_valid": total_valid,
+            "completed_lists": completed_lists,
+            "active_lists": active_lists,
+            "valid_pct": round(valid_pct, 1),
+        }
     return {
-        "total_verified": total_verified,
-        "total_valid": total_valid,
-        "completed_lists": completed_lists,
-        "active_lists": active_lists,
-        "valid_pct": round(valid_pct, 1),
+        **agg,
         "deploy_tier": DEPLOY_TIER,
         "deploy_label": DEPLOY_LABEL,
         "generated_at": int(time.time()),

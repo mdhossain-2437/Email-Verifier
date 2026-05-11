@@ -103,6 +103,80 @@ def test_list_jobs_endpoint_returns_well_formed_response(client: TestClient):
     assert isinstance(body["jobs"], list)
 
 
+def test_aggregate_public_stats_no_firestore_returns_none(monkeypatch):
+    """Without Firestore, the aggregator returns None so the endpoint
+    can fall back to its in-memory snapshot."""
+    from app import auth
+
+    monkeypatch.setattr(auth, "firestore_db", lambda: None)
+    assert jobs_persistence.aggregate_public_stats() is None
+
+
+def test_aggregate_public_stats_sums_across_docs(monkeypatch):
+    """Happy path: stream every doc in the collection, sum processed +
+    summary.valid, count done vs in-flight statuses. This is what
+    rescues the landing-page strip from showing single-machine totals
+    when Fly's LB round-robins the request."""
+    from app import auth
+
+    class FakeSnap:
+        def __init__(self, data):
+            self._data = data
+
+        def to_dict(self):
+            return self._data
+
+    class FakeCollection:
+        def __init__(self, docs):
+            self._docs = docs
+
+        def stream(self):
+            for d in self._docs:
+                yield FakeSnap(d)
+
+    class FakeDb:
+        def __init__(self, docs):
+            self._docs = docs
+
+        def collection(self, name):
+            assert name == "jobs"
+            return FakeCollection(self._docs)
+
+    docs = [
+        {"status": "done", "processed": 100, "summary": {"valid": 75}},
+        {"status": "done", "processed": 200, "summary": {"valid": 180}},
+        {"status": "running", "processed": 5, "summary": {"valid": 4}},
+        {"status": "interrupted", "processed": 50, "summary": {"valid": 30}},
+    ]
+    monkeypatch.setattr(auth, "firestore_db", lambda: FakeDb(docs))
+
+    agg = jobs_persistence.aggregate_public_stats()
+    assert agg is not None
+    # 100 + 200 + 5 + 50 = 355 total verified across all statuses
+    assert agg["total_verified"] == 355
+    # 75 + 180 + 4 + 30 = 289 valid
+    assert agg["total_valid"] == 289
+    # 2 done jobs
+    assert agg["completed_lists"] == 2
+    # 1 running, 0 queued = 1 active
+    assert agg["active_lists"] == 1
+    # 289 / 355 = 81.4%
+    assert agg["valid_pct"] == round(289 / 355 * 100, 1)
+
+
+def test_aggregate_public_stats_swallows_exceptions(monkeypatch):
+    """A Firestore RPC failure mid-stream must NOT 500 the landing page —
+    the endpoint falls through to the in-memory snapshot instead."""
+    from app import auth
+
+    class BoomDb:
+        def collection(self, name):
+            raise RuntimeError("firestore exploded")
+
+    monkeypatch.setattr(auth, "firestore_db", lambda: BoomDb())
+    assert jobs_persistence.aggregate_public_stats() is None
+
+
 def test_jobs_upload_endpoint_still_works_after_phase_a(client: TestClient):
     """Regression: bumping the cap and adding persistence shouldn't break
     the existing happy-path."""
