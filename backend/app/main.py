@@ -36,7 +36,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import api_keys, auth, jobs_persistence, profiles
+from . import api_keys, auth, jobs_persistence, profiles, results_storage
 from .auth import get_current_user, resolve_authorization
 from .disposable import is_disposable, is_role
 from .extractor import extract_emails, extract_unique
@@ -679,6 +679,7 @@ async def version_endpoint():
     on the public version endpoint (not on a protected route) precisely so
     a 401-ed client can still tell *why* it's getting locked out."""
     firestore_ok, firestore_error = auth.firestore_ping()
+    storage_ok, storage_error = results_storage.storage_ping()
     return {
         "name": "email-verifier",
         "version": app.version,
@@ -691,6 +692,12 @@ async def version_endpoint():
         "firebase_init_error": auth.firebase_init_error(),
         "firestore_ok": firestore_ok,
         "firestore_error": firestore_error,
+        # Surface Storage health alongside Firestore so ops can spot a
+        # missing bucket setup at deploy time. Multi-machine result
+        # downloads degrade silently without Storage; this banner makes
+        # the degradation visible.
+        "storage_ok": storage_ok,
+        "storage_error": storage_error,
         "deploy_mode": DEPLOY_MODE,
         "is_fallback": _is_fallback(),
         "deploy_tier": DEPLOY_TIER,
@@ -1054,6 +1061,15 @@ async def _run_job(
     finally:
         job.finished_at = time.time()
         jobs_persistence.save_job(job, uid=uid)
+        # Persist the full results array to Firebase Storage so any
+        # machine in the Fly pool can serve /results.csv (the in-memory
+        # ``_JOBS`` dict is process-local; Firestore can't hold results
+        # arrays past its 1 MB doc limit). Best-effort: if Storage isn't
+        # configured / enabled, we silently keep in-memory only. Only
+        # upload on success — error'd jobs have no useful results to
+        # restore.
+        if job.status == "done" and job.results:
+            results_storage.upload_results(job.id, uid, job.results)
 
 
 def _normalise_for_job(req: JobSubmitRequest, raw_emails: list[str]) -> list[str]:
@@ -1225,6 +1241,16 @@ async def list_jobs_endpoint(request: Request, limit: int = 50):
 @app.get("/api/jobs/{job_id}", response_model=JobStatusResponse)
 async def job_status(job_id: str, request: Request, include_results: bool = False):
     job = _require_owned_job(job_id, request)
+    # Click-for-report modal (frontend dashboard) sets include_results=true
+    # only when the user opens the modal. If we recovered the job from
+    # Firestore on a different machine, ``job.results`` is empty —
+    # lazy-load from Firebase Storage so the modal still shows real data
+    # instead of "0 results". Best-effort: silently falls through if
+    # Storage is unavailable.
+    if include_results and job.status == "done" and not job.results:
+        blob_results = results_storage.download_results(job_id, job.uid)
+        if blob_results is not None:
+            job.results = blob_results
     return _job_to_status(job, include_results=include_results)
 
 
@@ -1352,6 +1378,22 @@ async def _serve_job_results(job_id: str, fmt: str, status: Optional[str], reque
     job = _require_owned_job(job_id, request)
     if job.status != "done":
         raise HTTPException(status_code=409, detail=f"job is {job.status}")
+
+    # Lazy-load results from Firebase Storage when ``job.results`` is
+    # empty. Two cases trigger this:
+    #   1. The status poll hit a different Fly machine than the one
+    #      that processed the job (``_require_owned_job`` recovered the
+    #      job metadata from Firestore, but Firestore can't hold the
+    #      full results array — see ``_job_from_persisted_doc``).
+    #   2. This machine restarted since the job finished (Fly auto-stops
+    #      idle machines; the in-memory cache is lost on restart).
+    # If Storage is unavailable / not configured, we fall through with
+    # the in-memory list (which may be empty — caller gets an empty
+    # CSV, not a wrong-machine error).
+    if not job.results:
+        blob_results = results_storage.download_results(job_id, job.uid)
+        if blob_results is not None:
+            job.results = blob_results
 
     statuses = _parse_status_filter(status)
     selected = _filter_job_results(job.results, statuses)
@@ -1541,6 +1583,12 @@ async def cancel_job(job_id: str, request: Request):
     _JOBS.pop(job_id, None)
     if job.task and not job.task.done():
         job.task.cancel()
+    # Best-effort cleanup of the Storage blob. The Firestore doc is
+    # intentionally NOT deleted — listing endpoints surface the deletion
+    # via the missing in-memory entry, and keeping the doc allows
+    # auditing. (If we delete the doc, a follow-up cross-user 404 attack
+    # could distinguish "never existed" from "deleted" via timing.)
+    results_storage.delete_results(job_id, job.uid)
     return {"status": "deleted"}
 
 

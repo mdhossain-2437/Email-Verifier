@@ -85,3 +85,13 @@ def test_version_includes_firestore_fields(client: TestClient):
     body = r.json()
     assert "firestore_ok" in body
     assert "firestore_error" in body
+
+
+def test_version_includes_storage_fields(client: TestClient):
+    """Storage-probe: /api/version surfaces storage_ok so ops can spot a
+    missing Firebase Storage bucket setup at deploy time."""
+    r = client.get("/api/version")
+    assert r.status_code == 200
+    body = r.json()
+    assert "storage_ok" in body
+    assert "storage_error" in body

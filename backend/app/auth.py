@@ -90,9 +90,27 @@ def _init_admin_app() -> None:
                 return
 
             cred = credentials.Certificate(creds_dict)
-            _admin_app = firebase_admin.initialize_app(cred)
+            init_opts: dict[str, Any] = {}
+            # storageBucket is required by firebase_admin.storage.bucket()
+            # — we'd rather pass it once at init than on every blob op.
+            # Allow explicit override via FIREBASE_STORAGE_BUCKET (lets ops
+            # point at a non-default bucket); fall back to the standard
+            # ``<project>.firebasestorage.app`` for new Firebase projects
+            # (post-Oct-2024 default), then the legacy ``.appspot.com``.
+            bucket_name = os.environ.get("FIREBASE_STORAGE_BUCKET", "").strip()
+            if not bucket_name:
+                project_id = (creds_dict.get("project_id") or "").strip()
+                if project_id:
+                    bucket_name = f"{project_id}.firebasestorage.app"
+            if bucket_name:
+                init_opts["storageBucket"] = bucket_name
+            _admin_app = firebase_admin.initialize_app(cred, init_opts or None)
             _firestore_client = firestore.client(_admin_app)
-            logger.info("firebase_admin initialized for project %s", creds_dict.get("project_id"))
+            logger.info(
+                "firebase_admin initialized for project %s (storage bucket=%s)",
+                creds_dict.get("project_id"),
+                bucket_name or "<unset>",
+            )
         except Exception as exc:  # noqa: BLE001 - we want to capture every init failure
             _admin_init_failed = f"firebase_admin initialization failed: {exc}"
             logger.exception("firebase_admin init failed")
