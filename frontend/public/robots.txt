@@ -10,4 +10,4 @@ Disallow: /app/
 # this app verifies addresses you supply, it does not collect them
 # from the public web.
 
-Sitemap: https://saaf.email/sitemap.xml
+Sitemap: https://saaf-mail.vercel.app/sitemap.xml

@@ -11,7 +11,13 @@
 
 export const BRAND_NAME = "Saaf";
 export const BRAND_BANGLA = "সাফ";
-export const BRAND_DOMAIN = "saaf.email";
+// Primary production domain. The product also resolves at the legacy
+// `email-verifier-ruby.vercel.app` and the project-default
+// `email-verifier-mdhossain2437-9715s-projects.vercel.app` aliases — those
+// are CORS-allowed but NOT canonical. SEO + sitemap + structured-data
+// references must use this single primary URL so Google deduplicates the
+// duplicates correctly.
+export const BRAND_DOMAIN = "saaf-mail.vercel.app";
 export const BRAND_URL = `https://${BRAND_DOMAIN}`;
 
 export const BRAND_TAGLINE = "Clean email lists, fast.";

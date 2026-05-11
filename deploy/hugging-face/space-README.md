@@ -14,7 +14,7 @@ short_description: Tier-3 backup API for Delowar's Email Verifier.
 
 This Space hosts a free, always-on copy of the Email Verifier FastAPI
 backend, used as a tier-3 failover for the Vercel-hosted frontend at
-<https://email-verifier-ruby.vercel.app>. Source:
+<https://saaf-mail.vercel.app>. Source:
 <https://github.com/mdhossain-2437/Email-Verifier>.
 
 It is *not* a user-facing demo — there's no UI here, just a JSON API

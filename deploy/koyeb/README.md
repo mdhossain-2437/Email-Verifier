@@ -158,5 +158,5 @@ koyeb service redeploy email-verifier-koyeb
 `EMAIL_VERIFIER_ALLOWED_ORIGINS` and redeploy:
 ```bash
 koyeb service update email-verifier-koyeb \
-  --env "EMAIL_VERIFIER_ALLOWED_ORIGINS=https://email-verifier-ruby.vercel.app,http://localhost:5173"
+  --env "EMAIL_VERIFIER_ALLOWED_ORIGINS=https://saaf-mail.vercel.app,https://email-verifier-ruby.vercel.app,http://localhost:5173"
 ```

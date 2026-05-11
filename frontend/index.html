@@ -18,9 +18,9 @@
     <meta name="author" content="Delowar Hossain" />
     <meta
       name="keywords"
-      content="email verifier, email validator, bulk email verification, smtp probe, mx record check, email extractor, lead finder, deliverability, free email verifier, open source, saaf"
+      content="email verifier, email validator, bulk email verification, free email verifier, email permutator, email pattern generator, smtp probe, mx record check, email extractor, lead finder, deliverability, bounce checker, email list cleaner, csv email validator, open source email verifier, self-hosted email verifier, saaf, hunter alternative, neverbounce alternative, zerobounce alternative"
     />
-    <link rel="canonical" href="https://saaf.email/" />
+    <link rel="canonical" href="https://saaf-mail.vercel.app/" />
 
     <!-- Icons / PWA -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -47,7 +47,7 @@
       property="og:description"
       content="Paste a list. Saaf checks every address against the real mail server. You get a clean CSV back — no dead weight, no bounces. Free tier up to 100,000/job."
     />
-    <meta property="og:url" content="https://saaf.email/" />
+    <meta property="og:url" content="https://saaf-mail.vercel.app/" />
     <meta property="og:image" content="/og-image.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
@@ -77,11 +77,11 @@
         "@graph": [
           {
             "@type": "Organization",
-            "@id": "https://saaf.email/#organization",
+            "@id": "https://saaf-mail.vercel.app/#organization",
             "name": "Saaf",
             "alternateName": "সাফ",
-            "url": "https://saaf.email/",
-            "logo": "https://saaf.email/favicon-512.png",
+            "url": "https://saaf-mail.vercel.app/",
+            "logo": "https://saaf-mail.vercel.app/favicon-512.png",
             "sameAs": [
               "https://github.com/mdhossain-2437/Email-Verifier",
               "https://delowarhossain.dev"
@@ -89,30 +89,112 @@
           },
           {
             "@type": "SoftwareApplication",
-            "@id": "https://saaf.email/#software",
+            "@id": "https://saaf-mail.vercel.app/#software",
             "name": "Saaf",
-            "applicationCategory": "BusinessApplication",
+            "alternateName": ["Saaf Email Verifier", "Saaf Mail"],
+            "applicationCategory": ["BusinessApplication", "DeveloperApplication"],
+            "applicationSubCategory": "Email verification & deliverability",
             "operatingSystem": "Web",
-            "description": "Open-source email verifier and bulk extractor. Paste a list, get a clean CSV back. Free tier up to 100,000 addresses per job.",
-            "url": "https://saaf.email/",
-            "image": "https://saaf.email/og-image.png",
+            "description": "Open-source email verifier, bulk list cleaner, and lead-pattern engine. Paste up to 100,000 addresses per job and get a clean CSV back with syntax, MX, SMTP, role/disposable, free-vs-work, and country signals — no scraping, no per-credit pricing.",
+            "softwareVersion": "1.0",
+            "url": "https://saaf-mail.vercel.app/",
+            "image": "https://saaf-mail.vercel.app/og-image.png",
+            "screenshot": "https://saaf-mail.vercel.app/og-image.png",
+            "license": "https://github.com/mdhossain-2437/Email-Verifier/blob/main/LICENSE",
+            "isAccessibleForFree": true,
+            "featureList": [
+              "Bulk email verification up to 100,000 addresses per job",
+              "Single-address inspector with syntax, MX, SMTP probe",
+              "Email extractor for text, CSV, XLSX, HTML, JSON, EML, MBOX",
+              "Lead Finder: pattern-based work-email discovery",
+              "Email Permutator: every plausible corporate pattern for a (name, domain) pair",
+              "REST API with per-user API keys",
+              "Self-hostable: free Fly.io / Render / Hugging Face Spaces tiers",
+              "Per-user isolation: every job is scoped to its creator"
+            ],
             "offers": {
               "@type": "Offer",
               "price": "0",
-              "priceCurrency": "USD"
+              "priceCurrency": "USD",
+              "availability": "https://schema.org/InStock"
             },
-            "author": { "@id": "https://saaf.email/#person" },
-            "publisher": { "@id": "https://saaf.email/#organization" }
+            "author": { "@id": "https://saaf-mail.vercel.app/#person" },
+            "publisher": { "@id": "https://saaf-mail.vercel.app/#organization" }
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://saaf-mail.vercel.app/faq#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Is Saaf really free?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. Saaf is open source under MIT and the hosted version at saaf-mail.vercel.app is free for personal and commercial use up to 100,000 addresses per job. There is no per-credit pricing and no paid tier — the alternative is to self-host (Fly.io / Render / Hugging Face Spaces all have free tiers that comfortably run this workload)."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How does Saaf verify an email address?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Saaf runs four layers per address: (1) syntax check via the validate-email-address library, (2) MX record lookup to confirm the domain accepts mail, (3) optional SMTP handshake against the mail server to test the mailbox without sending an email, (4) classification flags for disposable, role-based, and free-vs-work providers. Combined, this gives a valid / risky / invalid / unknown verdict."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What's the difference between Lead Finder and Email Permutator?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Lead Finder takes a list of (name, company, domain) targets and returns the most likely work email per target (top 8 patterns, ranked, optionally MX-verified). Email Permutator takes a single (name, domain) pair and returns every plausible corporate pattern (~15 variants) so you can copy the full list into your CRM. Both share the same pattern engine — Lead Finder is optimised for batch quality, Permutator for completeness."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does Saaf scrape email addresses from the web?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. Saaf operates exclusively on addresses or pasted text that the operator supplies. There is no scraper, no web harvest, no third-party data broker. The lead-finder pattern engine generates candidate addresses from a name + domain you provide — it does not discover names from the public web."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is my data private?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. Every job, API key, and profile is scoped to your Firebase uid. Cross-user requests return indistinguishable 404 responses — another user cannot enumerate your job IDs even by guessing. Results are stored in Firebase Storage (your project's bucket, with per-uid Storage Rules) and Firestore (per-uid security rules)."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I self-host Saaf?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. The repo ships deploy recipes for Fly.io (free always-on), Render (free with cold-start), and Hugging Face Spaces (free always-on, 16 GB RAM). A Caddy + Docker Compose recipe is included for self-hosted VPS deployments. See the README for the full multi-tier failover guide."
+                }
+              }
+            ]
+          },
+          {
+            "@type": "BreadcrumbList",
+            "@id": "https://saaf-mail.vercel.app/#breadcrumb",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://saaf-mail.vercel.app/" },
+              { "@type": "ListItem", "position": 2, "name": "Features", "item": "https://saaf-mail.vercel.app/features" },
+              { "@type": "ListItem", "position": 3, "name": "Use cases", "item": "https://saaf-mail.vercel.app/use-cases" },
+              { "@type": "ListItem", "position": 4, "name": "Pricing", "item": "https://saaf-mail.vercel.app/pricing" },
+              { "@type": "ListItem", "position": 5, "name": "FAQ", "item": "https://saaf-mail.vercel.app/faq" }
+            ]
           },
           {
             "@type": "Person",
-            "@id": "https://saaf.email/#person",
+            "@id": "https://saaf-mail.vercel.app/#person",
             "name": "Md Delowar Hossain",
             "alternateName": "Delowar Hossain",
             "url": "https://delowarhossain.dev",
-            "image": "https://saaf.email/builder/delowar-portrait.webp",
+            "image": "https://saaf-mail.vercel.app/builder/delowar-portrait.webp",
             "jobTitle": "Creative Developer & Full-Stack Engineer",
-            "worksFor": { "@id": "https://saaf.email/#organization" },
+            "worksFor": { "@id": "https://saaf-mail.vercel.app/#organization" },
             "address": {
               "@type": "PostalAddress",
               "addressLocality": "Joypurhat",
@@ -126,10 +208,10 @@
           },
           {
             "@type": "WebSite",
-            "@id": "https://saaf.email/#website",
-            "url": "https://saaf.email/",
+            "@id": "https://saaf-mail.vercel.app/#website",
+            "url": "https://saaf-mail.vercel.app/",
             "name": "Saaf",
-            "publisher": { "@id": "https://saaf.email/#organization" },
+            "publisher": { "@id": "https://saaf-mail.vercel.app/#organization" },
             "inLanguage": "en"
           }
         ]
