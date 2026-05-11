@@ -178,8 +178,8 @@ export function CommandCenterView({
       <div className="space-y-6">
         <PageHeader
           eyebrow="/ 01 — Command center"
-          title="Command Center"
-          subtitle="Real-time overview of your verification ecosystem."
+          title="Your verification dashboard"
+          subtitle="At-a-glance view of every list you've checked — what's clean, what bounced, and where you stand on your monthly quota."
         />
         <FeatureUnavailableCard
           Icon={ShieldAlert}
@@ -213,8 +213,8 @@ export function CommandCenterView({
     <div className="space-y-6">
       <PageHeader
         eyebrow="/ 01 — Command center"
-        title="Command Center"
-        subtitle="Real-time overview of your verification ecosystem. Numbers below come from /api/dashboard — they reflect actual jobs run on this server, not demo data."
+        title="Your verification dashboard"
+        subtitle="Live overview of every list you've cleaned, every export you've downloaded, and your current monthly usage. Numbers update the moment a job finishes."
         cta={
           <div className="flex items-center gap-2">
             {lastUpdated && (
@@ -243,30 +243,30 @@ export function CommandCenterView({
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <DashboardTile
-          label="Total Verified"
+          label="Emails checked"
           value={formatBigNumber(snap?.total_verified ?? 0)}
-          detail={`${snap?.total_valid ?? 0} valid · session-local`}
+          detail={`${snap?.total_valid ?? 0} came back valid`}
           icon={Mail}
           tone="indigo"
         />
         <DashboardTile
-          label="Extraction Success"
+          label="Clean-list rate"
           value={`${(snap?.success_rate ?? 0).toFixed(1)}%`}
-          detail={`Across ${snap?.total_jobs ?? 0} jobs`}
+          detail={`Across ${snap?.total_jobs ?? 0} list${(snap?.total_jobs ?? 0) === 1 ? "" : "s"} you've run`}
           icon={CheckCircle2}
           tone="emerald"
         />
         <DashboardTile
-          label="API Health"
-          value={snap?.api_health === "operational" ? "Operational" : "—"}
-          detail={`${meta?.max_job_inputs?.toLocaleString() ?? "—"} per job`}
+          label="Service status"
+          value={snap?.api_health === "operational" ? "All systems go" : "—"}
+          detail={`Up to ${meta?.max_job_inputs?.toLocaleString() ?? "—"} emails per upload`}
           icon={ShieldCheck}
           tone="sky"
         />
         <DashboardTile
-          label="Active Jobs"
+          label="Working on"
           value={String(snap?.active_jobs ?? 0)}
-          detail={`Processing ${formatBigNumber(snap?.rows_in_flight ?? 0)} rows`}
+          detail={`${formatBigNumber(snap?.rows_in_flight ?? 0)} rows in flight right now`}
           icon={Activity}
           tone="amber"
         />

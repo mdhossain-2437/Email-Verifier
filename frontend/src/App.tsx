@@ -45,6 +45,11 @@ import { LoginPage } from "@/pages/LoginPage";
 import { SignupPage } from "@/pages/SignupPage";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { PricingPage } from "@/pages/public/PricingPage";
+import { FeaturesPage } from "@/pages/public/FeaturesPage";
+import { UseCasesPage } from "@/pages/public/UseCasesPage";
+import { FaqPage } from "@/pages/public/FaqPage";
+import { ChangelogPage } from "@/pages/public/ChangelogPage";
 import { ErrorBoundary, PanelErrorBoundary } from "@/components/ErrorBoundary";
 import { ServerStatusBanner } from "@/components/ServerStatusBanner";
 import { RouteFallback } from "@/components/common";
@@ -104,6 +109,11 @@ export default function App() {
           <ServerStatusBanner />
           <Routes>
             <Route path="/" element={<HomeRoute />} />
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/features" element={<FeaturesPage />} />
+            <Route path="/use-cases" element={<UseCasesPage />} />
+            <Route path="/faq" element={<FaqPage />} />
+            <Route path="/changelog" element={<ChangelogPage />} />
             <Route path="/login" element={<PublicOnly><LoginPage /></PublicOnly>} />
             <Route path="/signup" element={<PublicOnly><SignupPage /></PublicOnly>} />
             <Route

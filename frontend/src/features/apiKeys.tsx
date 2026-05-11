@@ -144,7 +144,7 @@ export function ApiKeysView() {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Label (e.g. CI runner, local dev, marketing-agent)"
+            placeholder="Give this key a name (e.g. 'CRM integration', 'my Python script')"
             maxLength={80}
             className="flex-1 rounded-lg border border-white/10 bg-white/5 focus:bg-white/10 focus:border-lime/40 outline-none text-sm px-3 py-2"
           />
@@ -157,10 +157,11 @@ export function ApiKeysView() {
             Create key
           </button>
         </form>
-        <p className="text-[11px] text-zinc-500">
-          Keys are 256-bit random and prefixed with <code>evk_</code>. We store
-          only a SHA-256 hash + the prefix server-side, so we cannot recover
-          the secret if you lose it.
+        <p className="text-[11px] text-zinc-400">
+          Each key is a long random string starting with <code>evk_</code>. We
+          only keep a one-way fingerprint on our side — so make sure to copy it
+          before you close this page. If you lose it, just delete and make a new
+          one.
         </p>
       </div>
 
