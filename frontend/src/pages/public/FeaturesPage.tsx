@@ -128,7 +128,7 @@ const FEATURES: FeatureSection[] = [
 
 export function FeaturesPage() {
   useEffect(() => {
-    document.title = "Features · Delowar's Email Verifier";
+    document.title = "Features · Saaf";
   }, []);
   return (
     <PublicLayout>

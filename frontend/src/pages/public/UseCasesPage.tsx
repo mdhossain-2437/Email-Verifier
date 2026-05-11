@@ -70,7 +70,7 @@ const CASES = [
 
 export function UseCasesPage() {
   useEffect(() => {
-    document.title = "Use cases · Delowar's Email Verifier";
+    document.title = "Use cases · Saaf";
   }, []);
   return (
     <PublicLayout>

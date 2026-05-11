@@ -116,7 +116,7 @@ const VALUE_PROPS = [
 
 export function PricingPage() {
   useEffect(() => {
-    document.title = "Pricing · Delowar's Email Verifier";
+    document.title = "Pricing · Saaf";
   }, []);
   return (
     <PublicLayout>

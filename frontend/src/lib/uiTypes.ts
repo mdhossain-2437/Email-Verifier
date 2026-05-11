@@ -44,17 +44,17 @@ export const PATH_TO_TAB: Record<string, Tab> = Object.fromEntries(
 ) as Record<string, Tab>;
 
 export const PAGE_TITLES: Record<Tab, string> = {
-  "command-center": "Command Center · Delowar's Email Verifier",
-  "verify-bulk": "Mass Processing · Delowar's Email Verifier",
-  "lead-finder": "Lead Finder · Delowar's Email Verifier",
-  extract: "Email Extractor · Delowar's Email Verifier",
-  "verify-one": "Single Inspector · Delowar's Email Verifier",
-  tools: "Tools Marketplace · Delowar's Email Verifier",
-  keys: "API Keys · Delowar's Email Verifier",
-  api: "REST API · Delowar's Email Verifier",
-  profile: "Profile · Delowar's Email Verifier",
-  settings: "Settings · Delowar's Email Verifier",
-  about: "About · Delowar's Email Verifier",
+  "command-center": "Dashboard · Saaf",
+  "verify-bulk": "Bulk verify · Saaf",
+  "lead-finder": "Find work emails · Saaf",
+  extract: "Extract emails · Saaf",
+  "verify-one": "Single inspector · Saaf",
+  tools: "All tools · Saaf",
+  keys: "API keys · Saaf",
+  api: "REST API · Saaf",
+  profile: "Profile · Saaf",
+  settings: "Settings · Saaf",
+  about: "About Saaf",
 };
 
 export const STATUS_META: Record<
@@ -83,9 +83,23 @@ export const STATUS_META: Record<
   },
 };
 
-export const PORTFOLIO_URL = "https://delowarhossain.dev";
-export const GITHUB_PROFILE = "https://github.com/mdhossain-2437";
-export const GITHUB_REPO = "https://github.com/mdhossain-2437/Email-Verifier";
+// Brand & social constants moved to ./brand.ts; re-exported here for
+// backward compatibility so existing imports keep working unchanged.
+export {
+  BRAND_NAME,
+  BRAND_BANGLA,
+  BRAND_DOMAIN,
+  BRAND_URL,
+  BRAND_TAGLINE,
+  BRAND_DESCRIPTION,
+  BRAND_DESCRIPTION_SHORT,
+  PORTFOLIO_URL,
+  FOLIO_URL,
+  GITHUB_PROFILE,
+  GITHUB_REPO,
+  CONTACT_EMAIL,
+  SOCIAL_LINKS,
+} from "./brand";
 
 export const SAMPLE_TEXT = `Hello team - please reach out to sales@github.com for partnership inquiries
 and to support@github.com for help. Marketing reports go to ada [at] example
